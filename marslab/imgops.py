@@ -160,7 +160,7 @@ def draw_edgemaps_on_image(
 def read_from_pointing(
     pointing_df: pd.DataFrame, filter_name: str, just_image: bool = True
 ) -> Union[pdr.Data, np.ndarray]:
-    # TODO: maybe too specific?
+    # TODO: maybe too specific? yes. ImageSet or whatever should be a class.
     if filter_name[-1] in ("R", "G", "B"):
         filter_name = filter_name[:-1]
     filter_files = pointing_df.loc[
