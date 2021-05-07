@@ -4,7 +4,6 @@
 # "D-99960 M2020 Camera EDR/RDR Data Products SIS Version 2.0 (Draft)"
 # (https://pds-imaging.jpl.nasa.gov/reviews/mars2020/mars2020_mission/document_camera/Mars2020_Camera_SIS.pdf)
 
-
 import pandas as pd
 
 def suite(inst):
@@ -153,7 +152,6 @@ def special_flag(fn,ptype='IMAGE'):
         raise(f"Unknown filename type: {ptype}")
 
 def sol(fn,ptype='IMAGE'):
-# def primary_timestamp(fn):
     if ptype=='IMAGE':
         if fn[4:8][0] in "ABCDEFGHIJKLMNOPQRSTUVWXYZ": # Flight or ground test
             return f"{fn[4:8]} - TRANSLATION TO BE DONE"
@@ -193,7 +191,8 @@ def parse_product_type(fn,ptype="IMAGE"):
     # There is a HUGE lookup table of possible values
     #   which might be implemented here.
     # See: M2020 camera image EDR/RDR product binary formats
-    # I have only implemented the ones coded "GREEN" for now.
+    # I have only implemented the ones coded "GREEN" for now
+    # (being the standard products to be produced).
     try:
         return {"ECM":"Original image product (possibly companded)",
                 "EJP":"Original JPEG as recieved from the rover",
@@ -229,7 +228,7 @@ def parse_product_type(fn,ptype="IMAGE"):
                 "RZD":"Zenith-scaled radiance (15-bit int static scale)",
                 "RZS":"Zenith-scaled raidance (12-bit int static scale)",
                 "RZY":"Zenith-scaled radiance (15-bit int dynamic scale)",
-                ### TODO: ALL OF THE COLOR PRODUCTS ARE SKIPPED HERE
+                ### TODO: ALL OF THE "COLOR" PRODUCTS ARE SKIPPED HERE
                 "DDD":"Stereo delta disparity (2-band,true disparity offset",
                 "DDL":"Stereo delta disparity of lines (single-band)",
                 "DDS":"Stereo delta disparity of samples (single-band)",
@@ -376,7 +375,7 @@ def site(fn,ptype="IMAGE"): #fn[28:31])
 def drive_counter():
     # generates a lookup table per p115-116 of the SIS
     # TODO: There is almost certainly a more elegant way to do this,
-    #   like with `itertools`
+    #   like with `itertools`, but this is fast enough for now.
     table = {}
     n=-1
     for i in list("0123456789"):
@@ -419,6 +418,7 @@ def downsample(fn): #fn[48:49])
     n = int(2**int(fn[48:49]))
     m = int(2**n)
     return f"{m}x{m}"
+
 def compression(fn): #fn[49:51])
     if fn[49:51].startswith("I"):
         if int(fn[49:51][1])<9:
@@ -468,7 +468,7 @@ def producer(fn,ptype='IMAGE'): #fn[51:52])
 def version_counter():
     # generates a lookup table per p119 of the SIS
     # TODO: There is almost certainly a more elegant way to do this,
-    #   like with `itertools`
+    #   like with `itertools`, but this is fast enough for now.
     table = {}
     n = -1
     for i in list("0123456789"):
@@ -535,8 +535,8 @@ def parse(fn):
     elif ptype=='MESH':
         print('MESH filenames are not yet supported.')
         return
-    # All the annoying conditions are just to order the information in the
-    # most useful way.
+    # All the ugly conditionalss are just to order the information in the
+    # most useful way for display.
     fntable = {}
     fntable['FILENAME'] = fn
     if ptype=='IMAGE':

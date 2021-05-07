@@ -46,12 +46,16 @@ def remove_ticks_and_style_colorbar(fig, ax, colorbar, mpl_options):
 def apply_image_filter(image, image_filter=None):
     """
     unpacking / pseudo-dispatch function
+
+    `image_filter` is a dict() that contains 'params' and 'function'
+    keys. The optional 'params' value is a parameters dict() and the 'function'
+    value is the corresponding function to run on `image`.
     """
     if image_filter is None:
         return image
-    if "params" in image_filter.keys():
+    try:
         params = image_filter["params"]
-    else:
+    except (KeyError, TypeError):
         params = {}
     return image_filter["function"](image, **params)
 
@@ -182,6 +186,7 @@ def border_crop(array: np.ndarray, crop=None) -> np.ndarray:
     """
     if crop is None:
         return array
+    assert len(crop)==4 # test for bad inputs
     pixels = [side if side != 0 else None for side in crop]
     for value in (1, 3):
         if isinstance(pixels[value], int):
@@ -802,21 +807,8 @@ def get_mpl_image(fig):
     return PIL.Image.open(buffer)
 
 
-# def get_mpl_image(fig):
-#     """
-#     tries to get the first AxesImage from a mpl figure.
-#     cranky and fault-intolerant
-#     """
-#
-#     axis_image = fig.axes[0].get_images()[0]
-#     axis_array = axis_image.get_array()
-#     if len(axis_array.shape) == 3:
-#         return axis_array
-#     return axis_image.cmap(axis_image.norm(axis_array))
-
-
 def make_thumbnail(
-    array, thumbnail_size=(256, 256), file_or_path_or_buffer=None, filetype=None
+    image_array, thumbnail_size=(256, 256), file_or_path_or_buffer=None, filetype=None
 ):
     """
     makes thumbnails from arrays or matplotlib images or PIL.Images
@@ -825,13 +817,13 @@ def make_thumbnail(
         file_or_path_or_buffer = io.BytesIO()
     if filetype is None:
         filetype = "jpeg"
-    if isinstance(array, matplotlib.figure.Figure):
-        output_image = get_mpl_image(array).convert("RGB")
-    elif isinstance(array, np.ndarray):
-        image_array = normalize_range(array, 0, 255).astype("uint8")
-        output_image = PIL.Image.fromarray(image_array).convert("RGB")
+    if isinstance(image_array, matplotlib.figure.Figure):
+        thumbnail_array = get_mpl_image(image_array).convert("RGB")
+    elif isinstance(image_array, np.ndarray):
+        image_array = normalize_range(image_array, 0, 255).astype("uint8")
+        thumbnail_array = PIL.Image.fromarray(image_array).convert("RGB")
     else:
-        output_image = array
-    output_image.thumbnail(thumbnail_size)
-    output_image.save(file_or_path_or_buffer, filetype)
+        thumbnail_array = image_array
+    thumbnail_array.thumbnail(thumbnail_size)
+    thumbnail_array.save(file_or_path_or_buffer, filetype)
     return file_or_path_or_buffer

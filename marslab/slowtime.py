@@ -3,8 +3,8 @@ tedious symbolic version of time.py, to use as a basis for more complex
 calculations.
 
 attempting to roughly match some outputs of mars24, primarily by reimplementing
-algorithms in Allison & McEwen 2000. mostly working. off by a minute or so for
-whatever reason. references:
+algorithms in Allison & McEwen 2000. mostly working.
+references:
     1. https://www.giss.nasa.gov/tools/mars24/help/algorithm.html
     2. Allison, M. 1997. Accurate analytic representations of solar time and
         seasons on Mars with applications to the Pathfinder/Surveyor missions.
@@ -146,7 +146,7 @@ PBS_i = A * sp.cos(
 
 
 # evaluation function for this sum
-def pbs(dt_j2000: float) -> float:
+def pbs(dt_j2000: float) -> np.ndarray:
     row_lambda = sp.lambdify([delta_j2000, A, tau, phi], PBS_i)
     return np.sum([
         row_lambda(dt_j2000, *perturbation_table[i])
