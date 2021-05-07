@@ -1,0 +1,25 @@
+name: marslab
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy
+  - pandas
+  - matplotlib
+  - git
+  - jupyter
+  - clize
+  - pip
+  - gdal
+  - rasterio
+  - pvl
+  - python-Levenshtein
+  - scipy
+  - scikit-image
+  - opencv
+  - fs
+  - pip:
+      - git+https://github.com/MillionConcepts/pdr.git
+  - astropy
+  - sympy
