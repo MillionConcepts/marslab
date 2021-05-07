@@ -1,4 +1,4 @@
-__version__ = '1.28.9'
+__version__ = '0.2.0'
 
 from marslab.time import drawclock
 from marslab import imgops
