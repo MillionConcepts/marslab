@@ -1,5 +1,10 @@
 from setuptools import setup, find_packages
 
+# this is provided as a convenience for automated install
+# hooks. we do not recommend using this file to install 
+# marslab or its dependencies. please use conda along with
+# the provided environment.yml file.
+
 setup(
     name='marslab',
     version='0.2.0',
@@ -12,9 +17,8 @@ setup(
     install_requires=[
 	'numpy', 
 	'matplotlib',
-        'scipy',
+    'scipy',	
 	'pdr',
-	'opencv',
 	'pillow',
 	'jupyter',
 	'astropy',
