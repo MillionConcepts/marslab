@@ -54,6 +54,9 @@ You should see ```marslab``` in the list of environments. Now run:
 and you will be in a Python environment that contains all the packages
 ```marslab``` needs. 
 
+This library has an additional dependency on Windows that is not currently accounted for 
+in the environment.yml file. Run ```pip install windows-curses``` to install it.
+
 **Important:** now that you've created this environment, you should 
 always have it active whenever you work with ```marslab```.
 
