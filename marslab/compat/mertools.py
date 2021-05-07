@@ -1,5 +1,9 @@
 """
-constants and functions for compatibility with MERTools
+Constants and utility functions for compatibility with MERTools.
+
+MERTools is an IDL software suite used for tactical data assessment and derived
+product generation. It is the exclusive intellectual property of Arizona State
+University (PI J. Bell) and made available on an as-needed basis.
 """
 
 from itertools import chain
@@ -61,7 +65,7 @@ MERSPECT_M20_COLOR_MAPPINGS = {
     "azure-2": "#004a7f",
     "azure-3": "#002c4c",
 }
-# Everything below here is from the MCAM / PCAM legacy functionality
+# The colors below here are from the MCAM / PCAM legacy functionality
 
 MERSPECT_MSL_COLOR_MAPPINGS = {
     "red": "#dc143c",  # duplicated from above w/ different hex code
@@ -86,8 +90,9 @@ MERSPECT_COLOR_MAPPINGS = {
     **MERSPECT_MSL_COLOR_MAPPINGS,
 }
 
-# conventional assignments of MERSpect ROI colors to feature classes.
-# no such mapping has yet been agreed upon for ZCAM.
+# Standard assignments of MERSpect ROI colors to feature classes.
+# for the Western Washington University Reflectance Lab (PI M. Rice).
+# No such mapping has yet been agreed upon for ZCAM.
 COLOR_TO_FEATURE_TYPE = {
     "MCAM": {
         "light purple": "drill tailings",
@@ -153,7 +158,7 @@ COLOR_TO_FEATURE_TYPE = {
 
 
 def parse_merspect_fn(fn):
-    # Parse the MERSpect produced filename for obs information
+    # Parse the MERSpect filename for obs information
     sol = int(fn.split("/")[-1].split("_")[0][3:])
     instrument = str.upper(fn.split("/")[-1].split("_")[1][:4])
     seq_id = fn.split("/")[-1].split("_")[1]
@@ -352,8 +357,9 @@ def roi_color_ix_to_color_name(color_ix: int, instrument: str = "MCAM") -> str:
     if instrument in ["MCAM", "PCAM"]:
         return list(MERSPECT_MSL_COLOR_MAPPINGS.keys())[color_ix]
     elif instrument == "ZCAM":
-        # TODO: verify this offset is right. it's weird, but perhaps it's
-        #  because they changed erasecolor to 0?
+        # The unit offset to the color indices is because "0" is reserved
+        # in MERspect as something like "blank canvas." The "erase"
+        # capability has a different color associated with it.
         return list(MERSPECT_M20_COLOR_MAPPINGS.keys())[color_ix - 1]
     else:
         raise ValueError(
