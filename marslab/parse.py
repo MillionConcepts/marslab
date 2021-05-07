@@ -4,6 +4,9 @@
 # "D-99960 M2020 Camera EDR/RDR Data Products SIS Version 2.0 (Draft)"
 # (https://pds-imaging.jpl.nasa.gov/reviews/mars2020/mars2020_mission/document_camera/Mars2020_Camera_SIS.pdf)
 
+import string
+import itertools
+
 import pandas as pd
 
 def suite(inst):
@@ -333,36 +336,18 @@ def thumbnail(fn): #fn[27:28])
     }[fn[27:28]]
 
 def site_counter():
-    # generates a lookup table per p115 of the SIS
-    # TODO: There is almost certainly a more elegant way to do this,
-    #   like with `itertools`
-    table = {}
-    n=-1
-    for i in list("0123456789"):
-        for j in list("0123456789"):
-            for k in list("0123456789"):
-                n=n+1
-                table[''.join((i,j,k))]=n
-    for i in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-        for j in list("0123456789"):
-            for k in list("0123456789"):
-                n=n+1
-                table[''.join((i,j,k))]=n
-    for i in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-        for j in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-            for k in list("0123456789"):
-                n=n+1
-                table[''.join((i,j,k))]=n
-    for i in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-        for j in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-            for k in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-                n=n+1
-                table[''.join((i,j,k))]=n
-    for i in list("01234567"):
-        for j in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-            for k in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-                n=n+1
-                table[''.join((i,j,k))]=n
+    # generates a lookup table per p185 of the SIS
+    # 0 - 32767 inclusively, so total 32768
+    # last valid is 7DV
+    digits, ascii_uppercase = string.digits, string.ascii_uppercase
+    collection = (
+        itertools.product(digits, repeat=3),
+        itertools.product(ascii_uppercase, digits, digits),
+        itertools.product(ascii_uppercase, ascii_uppercase, digits),
+        itertools.product(ascii_uppercase, repeat=3),
+        itertools.product(digits[0:7], ascii_uppercase, ascii_uppercase)
+    )
+    table = {k: v for v, k in enumerate(map(''.join, itertools.islice(itertools.chain(*collection), 32768)))}
     return table
 
 def site(fn,ptype="IMAGE"): #fn[28:31])
@@ -373,32 +358,16 @@ def site(fn,ptype="IMAGE"): #fn[28:31])
     return site_counter()[val]
 
 def drive_counter():
-    # generates a lookup table per p115-116 of the SIS
-    # TODO: There is almost certainly a more elegant way to do this,
-    #   like with `itertools`, but this is fast enough for now.
-    table = {}
-    n=-1
-    for i in list("0123456789"):
-        for j in list("0123456789"):
-            for k in list("0123456789"):
-                for m in list("0123456789"):
-                    n=n+1
-                    table[''.join((i,j,k,m))]=n
-                    #print(''.join((i,j,k,m)),n)
-    for i in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-        for j in list("0123456789"):
-            for k in list("0123456789"):
-                for m in list("0123456789"):
-                    n=n+1
-                    table[''.join((i,j,k,m))]=n
-                    #print(''.join((i,j,k,m)),n)
-    for i in list("ABCDEFGHIJKL"):
-        for j in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-            for k in list("0123456789"):
-                for m in list("0123456789"):
-                    n=n+1
-                    table[''.join((i,j,k,m))]=n
-                    #print(''.join((i,j,k,m)),n)
+    # generates a lookup table per p185-186 of the SIS,
+    # 0-65535 inclusively, so total 65536
+    # last valid is LJ35
+    digits, ascii_uppercase = string.digits, string.ascii_uppercase
+    collection = (
+        itertools.product(digits, repeat=4),
+        itertools.product(ascii_uppercase, digits, digits, digits),
+        itertools.product(ascii_uppercase[0:12], ascii_uppercase, digits, digits)
+    )
+    table = {k: v for v, k in enumerate(map(''.join, itertools.islice(itertools.chain(*collection), 65536)))}
     return table
 
 def drive(fn,ptype='IMAGE'): #fn[31:35])
@@ -466,21 +435,15 @@ def producer(fn,ptype='IMAGE'): #fn[51:52])
         return "Instrument Co-I"
 
 def version_counter():
-    # generates a lookup table per p119 of the SIS
-    # TODO: There is almost certainly a more elegant way to do this,
-    #   like with `itertools`, but this is fast enough for now.
-    table = {}
-    n = -1
-    for i in list("0123456789"):
-        for j in list("0123456789"):
-            n = n + 1
-            table[''.join((i, j))] = n
-            # print(''.join((i,j)),n)
-    for i in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-        for j in list("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-            n = n + 1
-            table[''.join((i, j))] = n
-            # print(''.join((i,j)),n)
+    # generates a lookup table per p189 of the SIS
+    # version counter indexing starts at 1
+    # first valid 01, last valid ZZ
+    digits, ascii_uppercase = string.digits, string.ascii_uppercase
+    collection = (
+        itertools.islice(itertools.product(digits, digits), 1, None), #00 is not valid
+        itertools.product(ascii_uppercase, digits+ascii_uppercase),
+    )
+    table = {k: v for v, k in enumerate(map(''.join, itertools.chain(*collection)), start=1)}
     return table
 
 def version(fn,ptype='IMAGE'): #fn[52:54])
