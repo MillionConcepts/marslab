@@ -12,8 +12,9 @@ Otherwise, please file an Issue.
 
 We recommend that you use the ```conda``` package manager to control your Python 
 environment for this library. We do not officially support use of non-```conda``` Python
-environments. If you're already equipped with conda, please create an env for this package
-using the following commands:
+environments (the setup.py file is included for convenience and install hooks only). If 
+you're already equipped with ```conda```, please create an env for this package using the following 
+commands:
 
     conda env create -f environment.yml
     conda activate marslab
