@@ -99,6 +99,7 @@ def count_rois_on_image(
         special_mask = np.full(image.shape, True)
         special_mask[np.isin(image, special_constants)] = False
     for roi_mask, roi_name in zip(roi_arrays, roi_names):
+        assert roi_mask.shape == image.shape, "it seems like this ROI might have been drawn on a different image."
         if detector_mask is not None:
             roi_mask = np.logical_and(roi_mask, detector_mask)
         if special_constants is not None:

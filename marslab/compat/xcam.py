@@ -335,7 +335,8 @@ TREAT_AS_BAYER_OPAQUE = {"ZCAM": ("R2", "R3", "R4", "R5", "R6")}
 
 
 def count_rois_on_xcam_images(
-    roi_hdulist, xcam_image_dict, instrument, pixel_map_dict=None
+    roi_hdulist, xcam_image_dict, instrument, pixel_map_dict=None,
+        debayer=True
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -371,7 +372,7 @@ def count_rois_on_xcam_images(
         if filter_name.endswith("0"):
             continue
         # bayer-counting logic
-        if filter_name not in TREAT_AS_BAYER_OPAQUE[instrument]:
+        if (filter_name not in TREAT_AS_BAYER_OPAQUE[instrument]) and (debayer == True):
             detector_mask = np.full(image.shape, False)
             bayer_pixels = NARROWBAND_TO_BAYER[instrument][filter_name]
             if isinstance(bayer_pixels, str):
