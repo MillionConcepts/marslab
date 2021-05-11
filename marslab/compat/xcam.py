@@ -12,6 +12,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from more_itertools import windowed
 
 from marslab.imgops import RGGB_PATTERN, count_rois_on_image, make_bayer
 
@@ -307,6 +308,26 @@ ZCAM_ZOOM_MOTOR_COUNT_TO_FOCAL_LENGTH = {
     9600: 110,
 }
 
+
+def piecewise_interpolate_focal_length(zmc):
+    z_values = ZCAM_ZOOM_MOTOR_COUNT_TO_FOCAL_LENGTH.keys()
+    f_values = ZCAM_ZOOM_MOTOR_COUNT_TO_FOCAL_LENGTH.values()
+    if zmc in z_values:
+        return ZCAM_ZOOM_MOTOR_COUNT_TO_FOCAL_LENGTH[zmc]
+    try:
+        for z1z2, f1f2 in zip(windowed(z_values, 2), windowed(f_values, 2)):
+            z1, z2 = z1z2
+            f1, f2 = f1f2
+            if not ((z1 < zmc) and (zmc < z2)):
+                continue
+            return round((f2 - f1) / (z2 - z1) * zmc + f1, 1)
+    except StopIteration:
+        raise ValueError(
+            str(zmc) + " is outside the range of zoom"
+            " motor counts I know how to deal with."
+        )
+
+
 NARROWBAND_TO_BAYER = {
     "ZCAM": {
         "L1": "red",
@@ -335,8 +356,7 @@ TREAT_AS_BAYER_OPAQUE = {"ZCAM": ("R2", "R3", "R4", "R5", "R6")}
 
 
 def count_rois_on_xcam_images(
-    roi_hdulist, xcam_image_dict, instrument, pixel_map_dict=None,
-        debayer=True
+    roi_hdulist, xcam_image_dict, instrument, pixel_map_dict=None, debayer=True
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -372,7 +392,9 @@ def count_rois_on_xcam_images(
         if filter_name.endswith("0"):
             continue
         # bayer-counting logic
-        if (filter_name not in TREAT_AS_BAYER_OPAQUE[instrument]) and (debayer == True):
+        if (filter_name not in TREAT_AS_BAYER_OPAQUE[instrument]) and (
+            debayer == True
+        ):
             detector_mask = np.full(image.shape, False)
             bayer_pixels = NARROWBAND_TO_BAYER[instrument][filter_name]
             if isinstance(bayer_pixels, str):
@@ -413,4 +435,3 @@ def count_rois_on_xcam_images(
         .pivot_table(columns=["COLOR"])
         .T.reset_index()
     )
-
