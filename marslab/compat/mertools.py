@@ -176,7 +176,7 @@ def get_unique_colors(csv, instrument):
     return np.unique(colors)
 
 
-def merspect_to_marslab(fn, write = True):
+def merspect_to_marslab(fn, write=True):
     csv = pd.read_csv(fn)
     # TODO: find a different way to get the sol, seq_id, instrument from the
     #  file because this isn't actually standardized within MERspect, only
@@ -189,7 +189,7 @@ def merspect_to_marslab(fn, write = True):
         obsparams = parse_merspect_fn(fn)
     # someone has named this something weird -- try to parse the data anyway
     except (ValueError, KeyError):
-        obsparams = {"SOL": '-', "INSTRUMENT": 'ZCAM', "SEQ_ID": '-'}
+        obsparams = {"SOL": "-", "INSTRUMENT": "ZCAM", "SEQ_ID": "-"}
     # Rename "# Wavelength (nm)" to "Wavelength (nm)"
     csv.rename(columns={"# Wavelength (nm)": "Wavelength"}, inplace=True)
     # Clean up column names
@@ -331,7 +331,12 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
     """
     try:
         sel = scipy.io.readsav(roi_path)
-        assert set(sel.keys()) == {'erasecolor', 'lseltemp', 'rseltemp', 'region_info'}
+        assert set(sel.keys()) in {
+            "erasecolor",
+            "lseltemp",
+            "rseltemp",
+            "region_info",
+        }
         return True
     except AssertionError:
         # this is apparently an IDL .sav file, but not a properly-formatted
@@ -339,7 +344,7 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
         return False
     # scipy.io.readsav uses general Exception
     except Exception as exception:
-        if 'Invalid SIGNATURE' in str(exception):
+        if "Invalid SIGNATURE" in str(exception):
             # this is not an IDL .sav file but rather something else
             return False
         # presumably FileNotFoundError, you passed an integer, stuff like that
@@ -363,8 +368,9 @@ def roi_color_ix_to_color_name(color_ix: int, instrument: str = "MCAM") -> str:
         return list(MERSPECT_M20_COLOR_MAPPINGS.keys())[color_ix - 1]
     else:
         raise ValueError(
-            "I don't have ROI color information about " + instrument +
-            ". I know about PCAM, MCAM, and ZCAM."
+            "I don't have ROI color information about "
+            + instrument
+            + ". I know about PCAM, MCAM, and ZCAM."
         )
 
 
