@@ -331,12 +331,14 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
     """
     try:
         sel = scipy.io.readsav(roi_path)
-        assert set(sel.keys()) in {
-            "erasecolor",
-            "lseltemp",
-            "rseltemp",
-            "region_info",
-        }
+        assert set(sel.keys()).issubset(
+            {
+                "erasecolor",
+                "lseltemp",
+                "rseltemp",
+                "region_info",
+            }
+        )
         return True
     except AssertionError:
         # this is apparently an IDL .sav file, but not a properly-formatted
