@@ -18,7 +18,6 @@ from numpy.linalg import norm
 import pandas as pd
 
 
-
 def preprocess_input(reflectance, errors=None, wavelengths=None):
     """
     did someone pass this function something silly? raise an issue.
@@ -113,7 +112,8 @@ def slope(
     wavelength space between two filters. only looks at the first
     two 'rows' you pass it, should you pass it more.
     """
-    assert not None in wavelengths, "wavelengths must be passed to slope()"
+    assert wavelengths is not None, "wavelengths must be passed to slope()"
+    assert None not in wavelengths, "wavelengths must be passed to slope()"
     reflectance_array, error_array, wavelength_array = preprocess_input(
         reflectance, errors, wavelengths
     )
@@ -134,7 +134,10 @@ def band_depth(
     wavelengths: Union[Sequence] = None,
 ):
     assert (
-        not None in wavelengths
+        wavelengths is not None
+    ), "wavelengths must be passed to band_depth()"
+    assert (
+        None not in wavelengths
     ), "wavelengths must be passed to band_depth()"
     reflectance_array, error_array, wavelength_array = preprocess_input(
         reflectance, errors, wavelengths
@@ -182,7 +185,8 @@ def band_min(
     _errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
     wavelengths: Optional[Sequence] = None,
 ):
-    assert not None in wavelengths, "wavelengths must be passed to band_min()"
+    assert wavelengths is not None, "wavelengths must be passed to band_min()"
+    assert None not in wavelengths, "wavelengths must be passed to band_min()"
     reflectance_array, _error_array, wavelength_array = preprocess_input(
         reflectance, None, wavelengths
     )
@@ -200,7 +204,8 @@ def band_max(
     _errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
     wavelengths: Optional[Sequence] = None,
 ):
-    assert not None in wavelengths, "wavelengths must be passed to band_min()"
+    assert wavelengths is not None, "wavelengths must be passed to band_max()"
+    assert None not in wavelengths, "wavelengths must be passed to band_max()"
     reflectance_array, _error_array, wavelength_array = preprocess_input(
         reflectance, None, wavelengths
     )

@@ -27,5 +27,9 @@ setup(
         "sympy",
         "clize",
         "pandas",
+        "more-itertools",
+        "pathos",
+        "cytoolz",
+        "rasterio"
     ],
 )

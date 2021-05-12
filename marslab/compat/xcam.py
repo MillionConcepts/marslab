@@ -337,11 +337,11 @@ NARROWBAND_TO_BAYER = {
         "L5": ("green_1", "green_2"),
         "L6": "blue",
         "R1": "red",
-        "R2": "red",
-        "R3": "red",
-        "R4": "red",
-        "R5": "red",
-        "R6": "red",
+        "R2": None,
+        "R3": None,
+        "R4": None,
+        "R5": None,
+        "R6": None,
         "L0G": ("green_1", "green_2"),
         "L0B": "blue",
         "L0R": "red",
@@ -350,9 +350,6 @@ NARROWBAND_TO_BAYER = {
         "R0R": "red",
     },
 }
-
-
-TREAT_AS_BAYER_OPAQUE = {"ZCAM": ("R2", "R3", "R4", "R5", "R6")}
 
 
 def count_rois_on_xcam_images(

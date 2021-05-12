@@ -350,6 +350,7 @@ def debayer_upsample(
     and either a bayer pattern or explicitly precalculated sets of absolute (and
     optionally relative) coordinates for those pixels.
     averages arrays if more than one pixel name is given.
+    TODO: the preamble to this may be excessively convoluted.
     """
     assert not (pattern is None and masks is None), (
         "debayer_upsample() must be passed either a bayer pattern or "
@@ -584,9 +585,12 @@ def decorrelation_stretch(
     render_mpl=False,
 ):
     """
-    decorrelation stretch of passed array on last axis of array
+    decorrelation stretch of passed array on last axis of array. see
+    Gillespie et al. 1986, etc., etc.
 
-    see MATLAB decorrstretch, etc.
+    This is partly an adaptation of the MATLAB DCS implementation.
+    Work towards this adaptation is partly due to lbrabec
+    (github.com/lbrabec/decorrstretch) and Christian Tate (unreleased).
     """
     working_array = input_array.copy()
     # TODO: this is not a good general case solution

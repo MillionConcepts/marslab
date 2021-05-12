@@ -19,7 +19,11 @@ dependencies:
   - scikit-image
   - opencv
   - fs
+  - pathos
+  - cytoolz
+  - rasterio
   - pip:
       - git+https://github.com/MillionConcepts/pdr.git
   - astropy
   - sympy
+  - more-itertools
