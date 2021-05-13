@@ -159,14 +159,14 @@ def draw_edgemaps_on_image(
     return fig
 
 
-def border_crop(array: np.ndarray, crop=None) -> np.ndarray:
+def crop(array: np.ndarray, bounds=None) -> np.ndarray:
     """
     crop: tuple of (left, right, top, bottom) pixels to trim
     """
     if crop is None:
         return array
-    assert len(crop) == 4  # test for bad inputs
-    pixels = [side if side != 0 else None for side in crop]
+    assert len(bounds) == 4  # test for bad inputs
+    pixels = [side if side != 0 else None for side in bounds]
     for value in (1, 3):
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
