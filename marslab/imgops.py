@@ -1,21 +1,16 @@
 import io
-from functools import reduce, partial
+from functools import reduce
 from itertools import repeat
-from operator import contains
-from typing import Sequence, Union, Mapping, Any
-from warnings import warn
+from typing import Sequence, Union, Mapping
 
-import matplotlib.figure
+import PIL.Image
 import matplotlib.cm as cm
+import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import PIL.Image
-import pdr
 from astropy.io import fits
 from scipy.ndimage import sobel, distance_transform_edt
-
-import marslab.spectops
 
 
 def simple_mpl_figure(image):
@@ -99,7 +94,9 @@ def count_rois_on_image(
         special_mask = np.full(image.shape, True)
         special_mask[np.isin(image, special_constants)] = False
     for roi_mask, roi_name in zip(roi_arrays, roi_names):
-        assert roi_mask.shape == image.shape, "it seems like this ROI might have been drawn on a different image."
+        assert (
+            roi_mask.shape == image.shape
+        ), "it seems like this ROI might have been drawn on a different image."
         if detector_mask is not None:
             roi_mask = np.logical_and(roi_mask, detector_mask)
         if special_constants is not None:
@@ -162,32 +159,13 @@ def draw_edgemaps_on_image(
     return fig
 
 
-def read_from_pointing(
-    pointing_df: pd.DataFrame, filter_name: str, just_image: bool = True
-) -> Union[pdr.Data, np.ndarray]:
-    # TODO: maybe too specific? yes. ImageSet or whatever should be a class.
-    if filter_name[-1] in ("R", "G", "B"):
-        filter_name = filter_name[:-1]
-    filter_files = pointing_df.loc[
-        pointing_df["FILTER"] == filter_name, "PATH"
-    ]
-    if len(filter_files) == 0:
-        raise FileNotFoundError
-    if len(filter_files) > 1:
-        warn("there appears to be more than one " + filter_name + " image")
-    pdr_data = pdr.read(filter_files.iloc[0])
-    if just_image:
-        return pdr_data.IMAGE
-    return pdr_data
-
-
 def border_crop(array: np.ndarray, crop=None) -> np.ndarray:
     """
     crop: tuple of (left, right, top, bottom) pixels to trim
     """
     if crop is None:
         return array
-    assert len(crop)==4 # test for bad inputs
+    assert len(crop) == 4  # test for bad inputs
     pixels = [side if side != 0 else None for side in crop]
     for value in (1, 3):
         if isinstance(pixels[value], int):
@@ -418,22 +396,6 @@ def rgb_from_bayer(
             )
         )
     return depth_stack(channels)
-
-
-def preprocess_image(image_array, debayer=None, crop_bounds=None, filt=None):
-    perform_debayer = False
-    if debayer is not None:
-        perform_debayer = True
-        if "eschew_filters" in debayer.keys():
-            if filt in debayer["eschew_filters"]:
-                perform_debayer = False
-    if perform_debayer is True:
-        if filt is not None:
-            debayer["pixel"] = debayer["mapping"][filt]
-        image_array = debayer_upsample(image_array, **debayer)
-    if crop_bounds is not None:
-        image_array = border_crop(image_array, crop_bounds)
-    return image_array
 
 
 def norm_clip(image, sigma=1):
@@ -670,136 +632,6 @@ def render_overlay(
     return remove_ticks_and_style_colorbar(fig, ax, colorbar, mpl_options)
 
 
-def db_masks_for_rapidlooks(debayer_options, shape):
-    # great, they have been precomputed, or so we trust
-    if "masks" in debayer_options.keys():
-        return debayer_options
-    debayer_options["masks"] = make_bayer(shape, debayer_options["pattern"])
-    debayer_options["row_column"] = {
-        pixel: (np.unique(mask[0]), np.unique(mask[1]))
-        for pixel, mask in debayer_options["masks"].items()
-    }
-    return debayer_options
-
-
-def rapidlooks_from_pointing(
-    pointing_df: pd.DataFrame,
-    rapidlook_instructions: Mapping,
-    filter_dict: Mapping,
-    preprocess_options: dict,
-    preloaded_images=None,
-    return_preprocessed_images=False,
-) -> Any:
-    """
-    makes rapidlooks for compatible instruments given a dataframe containing
-    images-per-filter and paths to those images, a mapping with operations
-    and filters and options (e.g. "dcs": {
-        "operation": "dcs",
-        "filters": ("L2", "L5", "L6"),   if normalize not in (False, None):
-        # or should we be using mpl's linear scaler as above? i don't think we
-        # need its masking features in this case, it's mostly to make it play
-        # nicely with cmaps
-        enhanced = normalize_range(enhanced, *normalize)
-        "options": STRETCHY_RAPIDLOOK_OPTIONS,
-    }), and a dict containing per-filter
-    wavelength information (e.g., output of make_xcam_filter_dict)
-
-    TODO: this function may be too big?
-
-    TODO: for things that don't have filters, this needs other rules
-
-    TODO: maybe replace print statements here with some kind of fancier pass-
-     through...although it is intended to be chatty, maybe the chattiness
-     shouldn't live in imgops? maybe this is really an xcam-specific function?
-    """
-    image_stash = {}
-    rapidlooks = {}
-    # don't mess with the literal from larger scope
-    pp_options = preprocess_options.copy()
-    if preloaded_images is not None:
-        available_filters = set(list(preloaded_images.keys()) + pointing_df["FILTER"].tolist())
-    else:
-        available_filters = set(pointing_df["FILTER"].tolist())
-    availability = partial(contains, available_filters)
-    for instruction in rapidlook_instructions.values():
-        filters = instruction["filters"]
-        operation = instruction["operation"]
-        if "name" in instruction.keys():
-            op_name = instruction["name"]
-        else:
-            op_name = operation
-        if "overlay" in instruction.keys():
-            all_filters = list(filters) + [instruction["overlay"]["filter"]]
-        else:
-            all_filters = filters
-        # filters_present = map()
-        if not all(map(availability, all_filters)):
-            print(
-                "Skipping "
-                + op_name
-                + " "
-                + str(filters)
-                + " due to missing images"
-            )
-            continue
-        print("generating " + op_name + " " + str(filters))
-        op_images = []
-        if preloaded_images is None:
-            preloaded_images = {}
-        for filt in all_filters:
-            if image_stash.get(filt) is not None:
-                # TODO: this prevents you from overlaying a processed filter
-                #  on itself
-                if filt in filters:
-                    op_images.append(image_stash.get(filt))
-            else:
-                if filt in preloaded_images.keys():
-                    # TODO: presently you are responsible for passing it preloaded
-                    #  bayer-named images if you want them -- L0R, etc. --
-                    #  although they can and should just be copies of the
-                    #  raw L0 / R0 bayer. if this function is xcam-specific
-                    #  maybe we can just explicitly add special handling.
-                    filt_image = preloaded_images[filt].copy()
-                else:
-                    filt_image = read_from_pointing(pointing_df, filt)
-                # precompute debayer masks (small but real time savings)
-                if "debayer" in pp_options.keys():
-                    pp_options["debayer"] = db_masks_for_rapidlooks(
-                        pp_options["debayer"], filt_image.shape
-                    )
-                pp_options["filt"] = filt
-                filt_image = preprocess_image(filt_image, **pp_options)
-                image_stash[filt] = filt_image
-                if filt in filters:
-                    op_images.append(filt_image)
-        if operation in marslab.spectops.SPECTOP_NAMES:
-            rapidlook = make_spectral_rapidlook(
-                spectop=getattr(marslab.spectops, operation),
-                op_images=op_images,
-                op_wavelengths=list(map(filter_dict.get, filters)),
-                **instruction["options"]
-            )
-        elif operation == "enhanced color":
-            rapidlook = render_enhanced(op_images, **instruction["options"])
-        elif operation == "dcs":
-            rapidlook = decorrelation_stretch(
-                depth_stack(op_images), **instruction["options"]
-            )
-        else:
-            raise ValueError("unknown rapidlook operation " + operation)
-        if "overlay" in instruction.keys():
-            rapidlook = render_overlay(
-                base_image=image_stash.get(instruction["overlay"]["filter"]),
-                overlay_image=rapidlook,
-                **instruction["overlay"]["options"]
-            )
-        rapidlooks[op_name + " " + "_".join(filters)] = rapidlook
-
-    if return_preprocessed_images is True:
-        return rapidlooks, image_stash
-    return rapidlooks
-
-
 def get_mpl_image(fig):
     """
     tries to get the first axis from a mpl figure.
@@ -813,7 +645,10 @@ def get_mpl_image(fig):
 
 
 def make_thumbnail(
-    image_array, thumbnail_size=(256, 256), file_or_path_or_buffer=None, filetype=None
+    image_array,
+    thumbnail_size=(256, 256),
+    file_or_path_or_buffer=None,
+    filetype=None,
 ):
     """
     makes thumbnails from arrays or matplotlib images or PIL.Images

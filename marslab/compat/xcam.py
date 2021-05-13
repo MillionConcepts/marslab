@@ -353,7 +353,8 @@ NARROWBAND_TO_BAYER = {
 
 
 def count_rois_on_xcam_images(
-    roi_hdulist, xcam_image_dict, instrument, pixel_map_dict=None, debayer=True
+    roi_hdulist, xcam_image_dict, instrument,
+    pixel_map_dict=None, bayer_pixel_dict =None,
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -362,6 +363,8 @@ def count_rois_on_xcam_images(
     there are so many potential special cases here that utterly transform
     control flow that we've chosen to structure it differently from the
     quick imaging functions. perhaps this is wrong, though.
+
+    TODO: too messy.
     """
     roi_listing = []
     # unrolling for easier iteration
@@ -377,23 +380,21 @@ def count_rois_on_xcam_images(
     left_hdu_names = [hdu.header["NAME"] for hdu in left_hdus]
     right_hdu_arrays = [hdu.data for hdu in right_hdus]
     right_hdu_names = [hdu.header["NAME"] for hdu in right_hdus]
-    for eye, color in product(("L", "R"), ("R", "G", "B")):
-        if eye + "0" in xcam_image_dict.keys():
-            xcam_image_dict[eye + "0" + color] = xcam_image_dict[
-                eye + "0"
-            ].copy()
-    bayer_masks = make_bayer(
-        list(xcam_image_dict.values())[0].shape, RGGB_PATTERN
-    )
+    if bayer_pixel_dict is None:
+        bayer_pixel_dict = NARROWBAND_TO_BAYER[instrument]
+    if not all([pixel is None for pixel in bayer_pixel_dict.values()]):
+        bayer_masks = make_bayer(
+            list(xcam_image_dict.values())[0].shape, RGGB_PATTERN
+        )
+    else:
+        bayer_masks = None
     for filter_name, image in xcam_image_dict.items():
         if filter_name.endswith("0"):
             continue
         # bayer-counting logic
-        if (filter_name not in TREAT_AS_BAYER_OPAQUE[instrument]) and (
-            debayer == True
-        ):
+        if bayer_pixel_dict[filter_name] is not None:
             detector_mask = np.full(image.shape, False)
-            bayer_pixels = NARROWBAND_TO_BAYER[instrument][filter_name]
+            bayer_pixels = bayer_pixel_dict[filter_name]
             if isinstance(bayer_pixels, str):
                 bayer_pixels = [bayer_pixels]
             for pixel in bayer_pixels:

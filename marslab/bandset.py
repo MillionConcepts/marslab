@@ -1,4 +1,3 @@
-from functools import partial
 from itertools import chain
 
 from multiprocessing import Pool
@@ -13,13 +12,13 @@ from cytoolz import merge, valfilter
 import marslab.spectops
 from marslab.imgops import (
     make_bayer,
-    preprocess_image,
     make_spectral_rapidlook,
     render_enhanced,
     decorrelation_stretch,
     depth_stack,
     render_overlay,
     debayer_upsample,
+    border_crop,
 )
 
 
@@ -156,7 +155,7 @@ def make_look(
 class BandSet:
     def __init__(
         self,
-        sources=None,
+        metadata=None,
         raw=None,
         debayered=None,
         looks=None,
@@ -168,9 +167,10 @@ class BandSet:
         bayer_info=None,
         load_method=rasterio_load_scaled,
         name=None,
+        counts=None,
     ):
         """
-        :param sources: dataframe containing at least "PATH", "BAND", "IX,
+        :param metadata: dataframe containing at least "PATH", "BAND", "IX,
         " optionally others
         :param raw: dictionary of NAME:ndarray or pdr.Data corresponding to
         unprocessed images
@@ -200,8 +200,9 @@ class BandSet:
         :param load_method -- 'pdr' or 'rasterio' -- how to open files
         :param name -- str, designated name for this observation / cluster
         of bands / etc.
+        :param roi_counts -- df of values for ROIs counted across bands
         """
-        self.sources = sources
+        self.metadata = metadata
         self.raw = raw
         self.debayered = debayered
         self.looks = looks
@@ -213,9 +214,10 @@ class BandSet:
         self.bayer_info = bayer_info
         self.load_method = load_method
         self.name = name
-        if isinstance(sources, pd.DataFrame):
-            if "IX" not in sources.columns:
-                sources["IX"] = 0
+        self.counts = counts
+        if isinstance(metadata, pd.DataFrame):
+            if "IX" not in metadata.columns:
+                metadata["IX"] = 0
         for image_set_attribute in ("raw", "looks", "thumbs", "debayered"):
             if getattr(self, image_set_attribute) is None:
                 setattr(self, image_set_attribute, {})
@@ -225,14 +227,19 @@ class BandSet:
             pool = Pool(threads)
         else:
             pool = None
-        sources = self.sources.copy()
-        relevant_sources = sources.loc[sources["BAND"].isin(bands)]
+        load_df = self.metadata.copy()
+
+        if bands == "all":
+            bands = load_df["BAND"].values
+            relevant_metadata = load_df
+        else:
+            relevant_metadata = load_df.loc[load_df["BAND"].isin(bands)]
         # group bands by file -- for instruments like MASTCAM, this is a
         # one-row/band df per file;
         # for RGB images, it will be three rows per file;
         # for instruments like Kaguya or Supercam, it could be hundreds per
         # file.
-        chunked_by_file = relevant_sources.dropna(subset=["PATH"]).groupby(
+        chunked_by_file = relevant_metadata.dropna(subset=["PATH"]).groupby(
             "PATH"
         )
         band_results = []
@@ -270,21 +277,21 @@ class BandSet:
         }
 
     def bayer_pixel(self, band_name):
-        if self.sources is not None:
-            if "BAYER_PIXEL" in self.sources.columns:
-                return self.sources.loc[
-                    self.sources["BAND"] == band_name, "BAYER_PIXEL"
+        if self.metadata is not None:
+            if "BAYER_PIXEL" in self.metadata.columns:
+                return self.metadata.loc[
+                    self.metadata["BAND"] == band_name, "BAYER_PIXEL"
                 ].iloc[0]
         return None
 
     def band_wavelength(self, band_name):
-        return self.sources.loc[
-            self.sources["BAND"] == band_name, "WAVELENGTH"
+        return self.metadata.loc[
+            self.metadata["BAND"] == band_name, "WAVELENGTH"
         ].iloc[0]
 
     def debayer_if_required(self, band_name, use_cache=True):
         """
-        return a debayered version of an image, if self.sources["BAYER_PIXEL"]
+        return a debayered version of an image, if self.metadata["BAYER_PIXEL"]
         suggests that there's debayering to do and a raw image is available.
         optionally fetch from cache of debayered images.
         """
@@ -303,7 +310,7 @@ class BandSet:
 
     def bulk_debayer(self, bands, threads=None):
         """
-        debayer all bands according to spec in self.sources and self.bayer_info,
+        debayer all bands according to spec in self.metadata and self.bayer_info,
         asynchronously / multithreaded if threads parameter is not None;
         cache in self.debayered
         """
@@ -327,7 +334,6 @@ class BandSet:
     def make_look_set(
         self,
         instructions,
-        preprocess_options,
         autoload=True,
         debayer_threads=None,
         look_threads=None,
@@ -338,12 +344,12 @@ class BandSet:
                 [instruction["bands"] for instruction in instructions.values()]
             )
         )
-        if (autoload is True) and (self.sources is not None):
+        if (autoload is True) and (self.metadata is not None):
             self.load(
                 [
                     band
                     for band in all_look_bands
-                    if (band in self.sources["BAND"].unique())
+                    if (band in self.metadata["BAND"].unique())
                     and (band not in self.raw.keys())
                 ]
             )
@@ -358,7 +364,6 @@ class BandSet:
             band for band in all_look_bands if band in tuple(self.raw.keys())
         ]
         self.bulk_debayer(bands_at_hand, threads=debayer_threads)
-        pp = partial(preprocess_image, **preprocess_options)
         # TODO, maybe: print skipping messages
         look_cache = {}
         if look_threads is not None:
@@ -383,13 +388,18 @@ class BandSet:
                     op_image = self.debayered[band]
                 else:
                     op_image = self.raw[band]
-                op_images.append(pp(op_image))
+                if "crop" in instruction.keys():
+                    op_images.append(
+                        border_crop(op_image, *instruction["crop"])
+                    )
+                else:
+                    op_images.append(op_image)
             # TODO: these are both sloppy. keeping self away from make_look
             #  is sort of a priority,
             #  but...
             op_wavelengths = None
-            if self.sources is not None:
-                if "WAVELENGTH" in self.sources.columns:
+            if self.metadata is not None:
+                if "WAVELENGTH" in self.metadata.columns:
                     op_wavelengths = [
                         self.band_wavelength(band) for band in bands
                     ]
