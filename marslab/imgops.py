@@ -1,3 +1,4 @@
+import gc
 import io
 from functools import reduce
 from itertools import repeat
@@ -163,7 +164,7 @@ def crop(array: np.ndarray, bounds=None) -> np.ndarray:
     """
     crop: tuple of (left, right, top, bottom) pixels to trim
     """
-    if crop is None:
+    if bounds is None:
         return array
     assert len(bounds) == 4  # test for bad inputs
     pixels = [side if side != 0 else None for side in bounds]
@@ -667,3 +668,16 @@ def make_thumbnail(
     thumbnail_array.thumbnail(thumbnail_size)
     thumbnail_array.save(file_or_path_or_buffer, filetype)
     return file_or_path_or_buffer
+
+
+def absolutely_destroy(thing):
+    if isinstance(thing, Mapping):
+        keys = list(thing.keys())
+        for key in keys:
+            del thing[key]
+    elif isinstance(thing, Sequence):
+        for _ in thing:
+            del _
+    del thing
+    plt.close("all")
+    gc.collect()

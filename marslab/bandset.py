@@ -1,13 +1,12 @@
+import warnings
+from collections.abc import Callable, Mapping, Collection, Sequence
 from itertools import chain
-
 from multiprocessing import Pool
+from typing import Optional, TYPE_CHECKING
 
-# Note: ignore any import optimization hints to remove `import dill`!
-# it does magick on import that makes some kinds of serialization work.
-# import dill
+from cytoolz import merge, valfilter
 import numpy as np
 import pandas as pd
-from cytoolz import merge, valfilter
 
 import marslab.spectops
 from marslab.imgops import (
@@ -19,27 +18,48 @@ from marslab.imgops import (
     render_overlay,
     debayer_upsample,
     crop,
+    absolutely_destroy,
 )
+
+if TYPE_CHECKING:
+    import pdr
+    import rasterio
 
 
 def cast_scale(
-        array, scale, offset, preserve_constants=None, float_dtype=np.float32
-):
-    """utility function for scaled loaders in this module to apply scale and offset"""
+    array: np.ndarray,
+    scale: float,
+    offset: float,
+    preserve_constants: Optional[Sequence[float]] = None,
+    float_dtype: np.ScalarType = np.float32,
+) -> np.ndarray:
+    """
+    utility function for scaled loaders in this module. actually apply the
+    scale and offset specified in the file. if the array is an integer dtype,
+    first cast it to a float dtype for better constant preservation and
+    interoperability. could be made minimally more efficient, if it mattered.
+    """
     if array.dtype.char in np.typecodes["AllInteger"]:
         scaled = array.astype(float_dtype).copy()
     else:
         scaled = array.copy()
+    if preserve_constants is None:
+        preserve_constants = []
     not_special = scaled[np.isin(scaled, preserve_constants, invert=True)]
     not_special += scale
     not_special *= offset
     return scaled
 
 
-def rasterio_scaler(reader, preserve_constants=None, float_dtype=np.float32):
+def rasterio_scaler(
+    reader: "rasterio.DatasetReader",
+    preserve_constants: Optional[Sequence[float]] = None,
+    float_dtype: np.ScalarType = np.float32,
+) -> Callable[[np.ndarray, int], np.ndarray]:
     """
     make a scaling function for a particular DatasetReader object
     """
+
     def scaler(array, band_ix):
         if reader.scales is None:
             scale = 1
@@ -51,21 +71,27 @@ def rasterio_scaler(reader, preserve_constants=None, float_dtype=np.float32):
             offset = reader.offsets[band_ix]
         if scale == 1 and offset == 0:
             return array
-        return cast_scale(array, preserve_constants, scale, offset, float_dtype)
+        return cast_scale(
+            array, scale, offset, preserve_constants, float_dtype
+        )
+
     return scaler
 
 
-def rasterio_load_scaled(path, band_df, bands, **scale_kwargs):
+def rasterio_load_scaled(
+    path: str, band_df: pd.DataFrame, bands: pd.Series, **scale_kwargs
+):
     """
     simple rasterio-based image loading function that reads an image in and
     scales it if applicable
     """
     import rasterio
+
     band_arrays = {}
     reader = rasterio.open(path)
     scaler = rasterio_scaler(reader, **scale_kwargs)
     for _, band in band_df.iterrows():
-        if band["BAND"] not in bands:
+        if band["BAND"] not in bands.values:
             continue
         band_arrays[band["BAND"]] = scaler(
             reader.read(int(band["IX"] + 1)), band["IX"]
@@ -73,10 +99,15 @@ def rasterio_load_scaled(path, band_df, bands, **scale_kwargs):
     return band_arrays
 
 
-def pdr_scaler(data, preserve_constants=None, float_dtype=np.float32):
+def pdr_scaler(
+    data: "pdr.Data",
+    preserve_constants: Sequence[float] = None,
+    float_dtype=np.float32,
+) -> Callable[[np.ndarray, int], np.ndarray]:
     """
     make a scaling function for a particular DatasetReader object
     """
+
     def scaler(image, band_ix):
         if len(image.shape) == 3:
             image = image[band_ix].copy()
@@ -92,38 +123,41 @@ def pdr_scaler(data, preserve_constants=None, float_dtype=np.float32):
         return cast_scale(
             data.IMAGE, scale, offset, preserve_constants, float_dtype
         )
+
     return scaler
 
 
-def pdr_load_scaled(path, band_df, bands):
+def pdr_load_scaled(path: str, band_df: pd.DataFrame, bands: pd.Series):
     """
     simple pdr-based image loading function that reads an image in and
     scales it if applicable
     """
     import pdr
+
     band_arrays = {}
     data = pdr.read(path)
     scaler = pdr_scaler(data)
     for _, band in band_df.iterrows():
-        if band["BAND"] not in bands:
+        if band["BAND"] not in bands.values:
             continue
         band_arrays[band["BAND"]] = scaler(data.IMAGE, band["IX"])
     return band_arrays
 
 
 def make_look(
-        operation,
-        op_images,
-        option_dict,
-        overlay_dict=None,
-        base_image=None,
-        op_wavelengths=None,
+    operation: str,
+    op_images: Sequence[np.ndarray],
+    option_dict: Mapping,
+    overlay_dict: Optional[Mapping] = None,
+    base_image: Optional[np.ndarray] = None,
+    op_wavelengths: Optional[Sequence[float]] = None,
 ):
     """
     primary execution function for handling look rendering. make an individual
     look from distinct image inputs. called by BandSet.make_look_set() as part
     of interpreting a full look markup dictionary, but can also be manually
-    called for individual looks
+    called for individual looks.
+    TODO: should this live in marslab.imgops?
     """
     if operation in marslab.spectops.SPECTOP_NAMES:
         look_image = make_spectral_rapidlook(
@@ -150,20 +184,21 @@ def make_look(
 # noinspection PyArgumentList
 class BandSet:
     def __init__(
-            self,
-            metadata=None,
-            raw=None,
-            debayered=None,
-            looks=None,
-            thumbs=None,
-            extended=None,
-            compact=None,
-            summary=None,
-            rois=None,
-            bayer_info=None,
-            load_method=rasterio_load_scaled,
-            name=None,
-            counts=None,
+        self,
+        metadata=None,
+        raw=None,
+        debayered=None,
+        looks=None,
+        thumbs=None,
+        extended=None,
+        compact=None,
+        summary=None,
+        rois=None,
+        bayer_info=None,
+        load_method=rasterio_load_scaled,
+        name=None,
+        counts=None,
+        threads=None,
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -197,6 +232,7 @@ class BandSet:
         :param name -- str, designated name for this observation / cluster
         of bands / etc.
         :param counts -- df of values for ROIs counted across bands
+        :param threads -- dict of thread counts for different things
         """
         self.metadata = metadata
         self.raw = raw
@@ -211,28 +247,33 @@ class BandSet:
         self.load_method = load_method
         self.name = name
         self.counts = counts
+        self.threads = threads
         if isinstance(metadata, pd.DataFrame):
             if "IX" not in metadata.columns:
                 metadata["IX"] = 0
-        for image_set_attribute in ("raw", "looks", "thumbs", "debayered"):
-            if getattr(self, image_set_attribute) is None:
-                setattr(self, image_set_attribute, {})
+        for mapping in ("raw", "looks", "thumbs", "debayered", "threads"):
+            if getattr(self, mapping) is None:
+                setattr(self, mapping, {})
+        self.cache_names = ("raw", "debayered", "looks")
 
-    def load(self, bands, threads=None, reload=False, quiet=False):
-        if threads is not None:
-            pool = Pool(threads)
+    def load(
+        self, bands: Collection[str], reload: bool = False, quiet: bool = False
+    ):
+        if self.threads.get("load") is not None:
+            pool = Pool(self.threads.get("load"))
         else:
             pool = None
         load_df = self.metadata.copy()
         if bands == "all":
-            bands = load_df["BAND"].values
-        bands = pd.Series(bands)
+            bands = load_df["BAND"]
+        else:
+            bands = pd.Series(tuple(bands))
         if reload is False:
             bands = bands.loc[~bands.isin(self.raw.keys())]
         if (quiet is False) and not (bands.isin(load_df["BAND"]).all()):
             print("Not all requested bands are available.")
-        # group bands by file -- for instruments like MASTCAM, this is a one-row
-        # / band df per file; for RGB images, three rows per file; for
+        # group bands by file -- for instruments like MASTCAM, this is a
+        # one-row / band df per file; for RGB images, three rows per file; for
         # instruments like Kaguya or Supercam, dozens or hundreds per file.
         loading = load_df.loc[load_df["BAND"].isin(bands)]
         chunked_by_file = loading.dropna(subset=["PATH"]).groupby("PATH")
@@ -250,7 +291,7 @@ class BandSet:
             band_results = [result.get() for result in band_results]
         self.raw |= merge(band_results)
 
-    def make_db_masks(self, shape=None, remake=False):
+    def make_db_masks(self, shape: Sequence[int, int] = None, remake=False):
         if "masks" in self.bayer_info.keys():
             if remake is False:
                 return
@@ -270,7 +311,7 @@ class BandSet:
             for pixel, mask in self.bayer_info["masks"].items()
         }
 
-    def bayer_pixel(self, band_name):
+    def bayer_pixel(self, band_name: str):
         try:
             return self.metadata.loc[
                 self.metadata["BAND"] == band_name, "BAYER_PIXEL"
@@ -278,7 +319,7 @@ class BandSet:
         except (KeyError, ValueError, AttributeError):
             return None
 
-    def wavelength(self, band_name):
+    def wavelength(self, band_name: str):
         try:
             return self.metadata.loc[
                 self.metadata["BAND"] == band_name, "WAVELENGTH"
@@ -286,7 +327,7 @@ class BandSet:
         except (KeyError, ValueError, AttributeError):
             return None
 
-    def debayer_if_required(self, band_name, use_cache=True):
+    def debayer_if_required(self, band_name: str, use_cache: bool = True):
         """
         return a debayered version of an image, if self.metadata["BAYER_PIXEL"]
         suggests that there's debayering to do and a raw image is available.
@@ -305,14 +346,14 @@ class BandSet:
             row_column=self.bayer_info["row_column"],
         )
 
-    def bulk_debayer(self, bands, threads=None):
+    def bulk_debayer(self, bands: Collection[str]):
         """
-        debayer all bands according to spec in self.metadata and self.bayer_info,
-        asynchronously / multithreaded if threads parameter is not None;
-        cache in self.debayered
+        debayer all bands according to spec in self.metadata and
+        self.bayer_info, asynchronously / multithreaded if
+        bandset.threads["debayer"] is set; cache in self.debayered
         """
-        if threads is not None:
-            pool = Pool(threads)
+        if self.threads.get("debayer") is not None:
+            pool = Pool(self.threads.get("debayer"))
             db = pool.map_async(self.debayer_if_required, bands)
             pool.close()
             pool.join()
@@ -333,7 +374,7 @@ class BandSet:
             if debayer is not None:
                 self.debayered[band] = debayer
 
-    def get_db(self, band):
+    def get_db(self, band: str):
         """
         get cached debayered image if it's present, raw if not. does not
         'intelligently' check for anything like debayer_if_required -- this
@@ -343,7 +384,9 @@ class BandSet:
             return self.debayered[band]
         return self.raw[band]
 
-    def prep_look_set(self, instructions, autoload, threads):
+    def prep_look_set(
+        self, instructions: Mapping[str, Mapping], autoload: bool
+    ):
         """
         filter the instruction set we want for the images we have.
         if requested, also autoload images to cache and debayer as
@@ -357,48 +400,47 @@ class BandSet:
         )
         # try to get them, if we don't have them yet
         if (autoload is True) and (self.metadata is not None):
-            self.load(desired_bands, quiet=True, threads=threads.get('load'))
+            self.load(desired_bands, quiet=True)
             # debayer them, if needed
             self.bulk_debayer(
                 set(self.raw.keys()).intersection(desired_bands),
-                threads=threads.get('debayer')
             )
         # what looks can we make with what we have?
         return valfilter(
             lambda value: set(value["bands"]).issubset(tuple(self.raw.keys())),
-            instructions
+            instructions,
         )
 
     def make_look_set(
-            self,
-            instructions,
-            autoload=True,
-            threads=None
+        self,
+        instructions: Mapping[str, Mapping],
+        autoload: bool = True,
     ):
         # load images and filter instruction set for unavailable bands
-        available_instructions = self.prep_look_set(
-            self, instructions, autoload, threads
-        )
+        available_instructions = self.prep_look_set(instructions, autoload)
         # TODO, maybe: print skipping messages
         look_cache = {}
         pool = None
-        if threads.get('look') is not None:
-            pool = Pool(8)
+        if self.threads.get("look") is not None:
+            pool = Pool(self.threads.get("look"))
         for inst in available_instructions.values():
             # do we have a special name? TODO: make this more opinionated?
             op_name = inst.get("name")
             if op_name is None:
                 op_name = inst["operation"]
-            print("generating " + op_name + " " + str(inst["bands"]))
+            if not inst.get("no_band_names"):
+                op_name += (" " + "_".join(inst["bands"]))
+            print("generating " + op_name)
             op_images = []
             for band in inst["bands"]:
                 op_image = self.get_db(band)
                 # crop image (does nothing if "crop" not set)
-                # TODO: is this doing anything mutable and upsetting?
                 op_images.append(crop(op_image, inst.get("crop")))
             # grab base image layer if we're making an overlay
             if "overlay" in inst.keys():
-                base_image = self.raw[inst["overlay"]["band"]]
+                base_image = crop(
+                    self.get_db(inst["overlay"]["band"]), inst.get("crop")
+                )
                 overlay_option_dict = inst["overlay"]["options"]
             else:
                 base_image = None
@@ -409,15 +451,15 @@ class BandSet:
             look_args = (
                 inst["operation"],
                 op_images,
-                inst.get(["options"]),
+                inst.get("options"),
                 overlay_option_dict,
                 base_image,
-                [self.wavelength(band) for band in inst["bands"]]
+                [self.wavelength(band) for band in inst["bands"]],
             )
             if pool is not None:
-                look_cache[op_name] = pool.apply_async(make_look, look_args)
+                look_cache[op_name] = pool.apply_async(make_look, *look_args)
             else:
-                look_cache[op_name] = make_look(look_args)
+                look_cache[op_name] = make_look(*look_args)
         if pool is not None:
             pool.close()
             pool.join()
@@ -426,3 +468,14 @@ class BandSet:
                 for look_name, look_result in look_cache.items()
             }
         self.looks |= look_cache
+
+    def purge(self, what: Optional[str] = None) -> None:
+        if what is None:
+            for cache_name in self.cache_names:
+                absolutely_destroy(getattr(self, cache_name))
+                setattr(self, cache_name, {})
+        elif what in self.cache_names:
+            absolutely_destroy(getattr(self, what))
+            setattr(self, what, {})
+        else:
+            raise ValueError(str(what) + " is not a valid cache type.")
