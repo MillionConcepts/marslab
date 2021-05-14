@@ -369,7 +369,6 @@ def count_rois_on_xcam_images(
     roi_listing = []
     # unrolling for easier iteration
     roi_hdus = [roi_hdulist[hdu_ix] for hdu_ix in roi_hdulist]
-    # TODO: this is too sloppy
     left_hdus = [
         hdu for hdu in roi_hdus if hdu.header["EYE"].upper() == "LEFT"
     ]
@@ -429,7 +428,7 @@ def count_rois_on_xcam_images(
                 }
             )
     return (
-        pd.DataFrame(roi_listing)
+        pd.DataFrame(roi_listing, dtype=np.float32)
         .pivot_table(columns=["COLOR"])
         .T.reset_index()
     )

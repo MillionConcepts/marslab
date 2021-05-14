@@ -46,8 +46,9 @@ def cast_scale(
     if preserve_constants is None:
         preserve_constants = []
     not_special = scaled[np.isin(scaled, preserve_constants, invert=True)]
-    not_special += scale
-    not_special *= offset
+    not_special *= scale
+    not_special += offset
+    scaled[np.isin(scaled, preserve_constants, invert=True)] = not_special
     return scaled
 
 
@@ -94,7 +95,8 @@ def rasterio_load_scaled(
         if band["BAND"] not in bands.values:
             continue
         band_arrays[band["BAND"]] = scaler(
-            reader.read(int(band["IX"] + 1)), band["IX"]
+            reader.read(int(band["IX"] + 1)), band["IX"],
+
         )
     return band_arrays
 
@@ -169,9 +171,7 @@ def make_look(
     elif operation == "enhanced color":
         look_image = render_enhanced(op_images, **option_dict)
     elif operation == "dcs":
-        look_image = decorrelation_stretch(
-            depth_stack(op_images), **option_dict
-        )
+        look_image = decorrelation_stretch(op_images, **option_dict)
     else:
         raise ValueError("unknown look operation " + operation)
     if overlay_dict is not None:

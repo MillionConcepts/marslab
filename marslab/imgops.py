@@ -541,11 +541,13 @@ def render_enhanced(
 
 
 def decorrelation_stretch(
-    input_array,
+    channels,
     contrast_stretch,
     special_constants=None,
     image_filter=None,
     render_mpl=False,
+    prefilter=None,
+    sigma=None
 ):
     """
     decorrelation stretch of passed array on last axis of array. see
@@ -555,7 +557,10 @@ def decorrelation_stretch(
     Work towards this adaptation is partly due to lbrabec
     (github.com/lbrabec/decorrstretch) and Christian Tate (unreleased).
     """
-    working_array = input_array.copy()
+    channels = [
+        apply_image_filter(channel.copy(), prefilter) for channel in channels
+    ]
+    working_array = depth_stack(channels)
     # TODO: this is not a good general case solution
     if special_constants is not None:
         working_array = np.where(
@@ -569,8 +574,12 @@ def decorrelation_stretch(
         working_dtype = channel_vectors.dtype
     channel_covariance = np.cov(channel_vectors.T, dtype=working_dtype)
     # target per-channel standard deviation as a diagonalized matrix,
-    # here simply set equal to per-channel input standard deviation
-    channel_sigmas = np.diag(np.sqrt(channel_covariance.diagonal()))
+    # here simply set equal to per-channel input standard deviation,
+    # unless sigma is passed.
+    if sigma is not None:
+        channel_sigmas=np.diag(np.array([sigma for _ in range(len(channels))]))
+    else:
+        channel_sigmas = np.diag(np.sqrt(channel_covariance.diagonal()))
     eigenvalues, eigenvectors = np.linalg.eig(channel_covariance)
     # diagonal matrix containing per-band "stretch factors"
     stretch_matrix = np.diag(1 / np.sqrt(eigenvalues))
