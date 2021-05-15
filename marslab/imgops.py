@@ -1,8 +1,15 @@
 import gc
 import io
+from collections.abc import (
+    Callable,
+    Sequence,
+    Mapping,
+    MutableMapping,
+    Collection,
+)
 from functools import reduce
 from itertools import repeat
-from typing import Sequence, Union, Mapping
+from typing import Union
 
 import PIL.Image
 import matplotlib.cm as cm
@@ -11,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from astropy.io import fits
+from cytoolz.functoolz import curry
 from scipy.ndimage import sobel, distance_transform_edt
 
 
@@ -27,18 +35,43 @@ def simple_mpl_figure(image):
     return fig
 
 
-def remove_ticks_and_style_colorbar(fig, ax, colorbar, mpl_options):
+def remove_ticks(ax):
     ax.set_xticks([])
     ax.set_yticks([])
-    if "tick_fp" in mpl_options:
-        for tick in colorbar.ax.get_yticklabels():
-            tick.set_font_properties(mpl_options["tick_fp"])
-        colorbar.ax.get_yaxis().get_offset_text().set_font_properties(
-            mpl_options["tick_fp"]
+
+
+def set_colorbar_font(colorbar, colorbar_fp):
+    for tick in colorbar.ax.get_yticklabels():
+        tick.set_font_properties(colorbar_fp)
+    colorbar.ax.get_yaxis().get_offset_text().set_font_properties(colorbar_fp)
+
+
+def colormapped_plot(
+    array, cmap=None, render_colorbar=False, no_ticks=True, colorbar_fp=None
+):
+    norm = plt.Normalize(vmin=array.min(), vmax=array.max())
+    if isinstance(cmap, str):
+        cmap = cm.get_cmap(cmap)
+    if cmap is None:
+        cmap = cm.get_cmap("Greys_r")
+    array = cmap(norm(array))
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    ax.imshow(array)
+    if render_colorbar:
+        colorbar = plt.colorbar(
+            cm.ScalarMappable(norm=norm, cmap=cmap),
+            ax=ax,
+            fraction=0.03,
+            pad=0.04,
         )
+        if colorbar_fp:
+            set_colorbar_font(colorbar, colorbar_fp)
+    if no_ticks:
+        remove_ticks(ax)
     return fig
 
-
+# TODO: cruft?
 def apply_image_filter(image, image_filter=None):
     """
     unpacking / pseudo-dispatch function
@@ -434,34 +467,21 @@ def normalize_range(
 
 
 def make_spectral_rapidlook(
+    images,
     spectop,
-    op_images,
-    op_wavelengths=None,
+    wavelengths=None,
     special_constants=None,
     clip=None,
-    image_filter=None,
-    mpl_options=None,
     default_value=0,
-    prefilter=None,
 ):
-    if prefilter is not None:
-        if "params" in prefilter.keys():
-            params = prefilter["params"]
-        else:
-            params = {}
-        op_images = [
-            prefilter["function"](op_image.copy(), **params)
-            for op_image in op_images
-        ]
-    rapidlook = spectop(op_images, None, op_wavelengths)[0]
-    # TODO: add watermark
+    rapidlook = spectop(images, None, wavelengths)[0]
     # ignoring nans and special constants in scaling
     rapidlook[np.where(np.isnan(rapidlook))] = default_value
     rapidlook[np.where(np.isinf(rapidlook))] = default_value
     if special_constants is not None:
-        for op_image in op_images:
+        for image in images:
             rapidlook[
-                np.where(np.isin(op_image, special_constants))
+                np.where(np.isin(image, special_constants))
             ] = default_value
     if clip is not None:
         if "params" in clip.keys():
@@ -469,44 +489,10 @@ def make_spectral_rapidlook(
         else:
             params = {}
         rapidlook = clip["function"](rapidlook, **params)
-    if image_filter is not None:
-        if "params" in image_filter.keys():
-            params = image_filter["params"]
-        else:
-            params = {}
-        rapidlook = image_filter["function"](rapidlook, **params)
-    if mpl_options is not None:
-        norm = plt.Normalize(vmin=rapidlook.min(), vmax=rapidlook.max())
-        cmap = mpl_options["cmap"]
-        rapidlook = cmap(norm(rapidlook))
-        fig = plt.figure()
-        ax = fig.add_subplot()
-        ax.imshow(rapidlook)
-        # TODO: make this editable i guess although it might just be a bad idea
-        colorbar = plt.colorbar(
-            cm.ScalarMappable(norm=norm, cmap=cmap),
-            ax=ax,
-            fraction=0.03,
-            pad=0.04,
-        )
-        return remove_ticks_and_style_colorbar(fig, ax, colorbar, mpl_options)
-
     return rapidlook
 
 
-def make_three_channel_filter(image_filter):
-    def apply_per_channel(image, *args, **kwargs):
-        output_channels = []
-        for channel_ix in range(3):
-            output_channels.append(
-                image_filter(image[:, :, channel_ix], *args, **kwargs)
-            )
-        return depth_stack(output_channels)
-
-    return apply_per_channel
-
-
-def render_enhanced(
+def render_rgb_composite(
     channels,
     special_constants=None,
     normalize=(0, 1, 0, 0),
@@ -515,29 +501,28 @@ def render_enhanced(
     prefilter=None,
 ):
     """
-    render an 'enhanced-color' image from three input channels
+    render a composited image from three input channels. this is a good basis
+    for producing both "true-color" and "enhanced-color" images from most
+    filter sets.
 
     this assumes normalization as a default option because you're presumably
     going to want to view these as "normal" RGB images, not scaled to an
-    arbitrary colormap (although aren't they all?)
+    arbitrary colormap (although aren't they all?).
     """
     assert len(channels) == 3
-    enhanced = [
+    composed = [
         apply_image_filter(channel.copy(), prefilter) for channel in channels
     ]
-    enhanced = depth_stack(enhanced)
+    composed = depth_stack(composed)
     if special_constants is not None:
-        enhanced = np.where(np.isin(enhanced, special_constants), 0, enhanced)
+        composed = np.where(np.isin(composed, special_constants), 0, composed)
     if normalize not in (False, None):
-        # or should we be using mpl's linear scaler as above? i don't think we
-        # need its masking features in this case, it's mostly to make it play
-        # nicely with cmaps
-        enhanced = normalize_range(enhanced, *normalize)
-    enhanced = apply_image_filter(enhanced, image_filter)
+        composed = normalize_range(composed, *normalize)
+    composed = apply_image_filter(composed, image_filter)
 
     if render_mpl is True:
-        return simple_mpl_figure(enhanced)
-    return enhanced
+        return simple_mpl_figure(composed)
+    return composed
 
 
 def decorrelation_stretch(
@@ -547,7 +532,7 @@ def decorrelation_stretch(
     image_filter=None,
     render_mpl=False,
     prefilter=None,
-    sigma=None
+    sigma=None,
 ):
     """
     decorrelation stretch of passed array on last axis of array. see
@@ -577,7 +562,9 @@ def decorrelation_stretch(
     # here simply set equal to per-channel input standard deviation,
     # unless sigma is passed.
     if sigma is not None:
-        channel_sigmas=np.diag(np.array([sigma for _ in range(len(channels))]))
+        channel_sigmas = np.diag(
+            np.array([sigma for _ in range(len(channels))])
+        )
     else:
         channel_sigmas = np.diag(np.sqrt(channel_covariance.diagonal()))
     eigenvalues, eigenvectors = np.linalg.eig(channel_covariance)
@@ -592,8 +579,8 @@ def decorrelation_stretch(
         np.dot, [channel_sigmas, eigenvectors, stretch_matrix, eigenvectors.T]
     )
     # TODO: this 'offset' term does not explicitly exist in the matlab
-    #  implementation.
-    #  check against reference algorithm.
+    #  implementation. check against reference algorithm. it rarely does
+    #  anything, though.
     offset = channel_means - np.dot(channel_means, transformation_matrix)
     # remove mean from each channel, transform, replace mean and add offset
     dcs_vectors = (
@@ -621,25 +608,37 @@ def render_overlay(
     overlay_cmap,
     base_cmap,
     overlay_opacity,
-    mpl_options,
+    mpl_settings,
 ):
-    # TODO: put a filter inline on _just the overlay_
     norm = plt.Normalize(vmin=overlay_image.min(), vmax=overlay_image.max())
     fig = plt.figure()
     ax = fig.add_subplot()
     colorbar = plt.colorbar(
-        cm.ScalarMappable(norm=norm, cmap=overlay_cmap),
+        cm.ScalarMappable(cmap=overlay_cmap),
         ax=ax,
         fraction=0.03,
         pad=0.04,
         alpha=overlay_opacity,
     )
-    base_image = normalize_range(base_image, 0, 1)
+    base_image = normalize_range(base_image, 0, 1, 1, 1)
+    if isinstance(base_cmap, str):
+        base_cmap = cm.get_cmap(base_cmap)
+    if isinstance(overlay_cmap, str):
+        overlay_cmap = cm.get_cmap(overlay_cmap)
     ax.imshow(
         base_cmap(base_image) * (1 - overlay_opacity)
         + overlay_cmap(norm(overlay_image)) * overlay_opacity
     )
-    return remove_ticks_and_style_colorbar(fig, ax, colorbar, mpl_options)
+    remove_ticks(ax)
+    if mpl_settings.get('colorbar_fp'):
+        set_colorbar_font(colorbar, mpl_settings['colorbar_fp'])
+    return fig
+
+
+def eightbit(array, cheat_low=0, cheat_high=0):
+    return np.round(
+        normalize_range(array, 0, 255, cheat_low, cheat_high)
+    ).astype(np.uint8)
 
 
 def get_mpl_image(fig):
@@ -670,7 +669,7 @@ def make_thumbnail(
     if isinstance(image_array, matplotlib.figure.Figure):
         thumbnail_array = get_mpl_image(image_array).convert("RGB")
     elif isinstance(image_array, np.ndarray):
-        image_array = normalize_range(image_array, 0, 255).astype("uint8")
+        image_array = eightbit(image_array)
         thumbnail_array = PIL.Image.fromarray(image_array).convert("RGB")
     else:
         thumbnail_array = image_array
@@ -680,7 +679,7 @@ def make_thumbnail(
 
 
 def absolutely_destroy(thing):
-    if isinstance(thing, Mapping):
+    if isinstance(thing, MutableMapping):
         keys = list(thing.keys())
         for key in keys:
             del thing[key]
@@ -690,3 +689,41 @@ def absolutely_destroy(thing):
     del thing
     plt.close("all")
     gc.collect()
+
+
+def make_multi_channel_filter(
+    filter_function: Callable, axis: int = -1
+) -> Callable[[np.ndarray, int], np.ndarray]:
+    """for now, pass it a closure if you want to bind arguments"""
+
+    def multi(
+        array: np.ndarray, *args, axis: int = axis, **kwargs
+    ) -> np.ndarray:
+        filt = curry(filter_function)(*args, **kwargs)
+        filtered = list(map(filt, np.split(array, array.shape[axis], axis)))
+        return np.concatenate(tuple(filtered), axis=axis)
+
+    return multi
+
+
+def broadcast_filter(filter_function: Callable) -> Callable:
+    def mapped_filter(arrays, *args, **kwargs):
+        return [filter_function(array, *args, **kwargs) for array in arrays]
+
+    return mapped_filter
+
+
+def crop_all(arrays: Collection[np.ndarray], bounds=None) -> list[np.ndarray]:
+    return [crop(array, bounds) for array in arrays]
+
+
+# def make_three_channel_filter(image_filter):
+#     def apply_per_channel(image, *args, **kwargs):
+#         output_channels = []
+#         for channel_ix in range(3):
+#             output_channels.append(
+#                 image_filter(image[:, :, channel_ix], *args, **kwargs)
+#             )
+#         return depth_stack(output_channels)
+#
+#     return apply_per_channel
