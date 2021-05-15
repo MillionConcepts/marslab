@@ -1,217 +1,38 @@
-from collections.abc import Callable, Mapping, Collection, Sequence
-from itertools import chain
-from multiprocessing import Pool
-from operator import methodcaller
-from typing import Optional, TYPE_CHECKING, Union
+"""
+defines a class for organizing and performing bulk rendering operations on
+multispectral image products
+"""
 
+from collections.abc import Mapping, Collection, Sequence
+from itertools import chain
+from typing import Optional, Union
+
+# note: ignore complaints from static analyzers about this import. dill
+# performs pickling magick at import.
+from cytoolz.dicttoolz import merge, valfilter
+import dill
+from pathos.multiprocessing import ProcessingPool
 import numpy as np
 import pandas as pd
-from cytoolz.dicttoolz import merge, valfilter
-from cytoolz.functoolz import compose_left, curry
-
-import marslab.spectops
-from marslab.imgops import (
-    make_bayer,
-    make_spectral_rapidlook,
-    render_rgb_composite,
-    decorrelation_stretch,
-    render_overlay,
-    debayer_upsample,
-    absolutely_destroy,
-    crop_all,
-    broadcast_filter,
-)
-
-if TYPE_CHECKING:
-    import pdr
-    import rasterio
 
 
-def get_from_all(key, mappings, default=None):
-    if isinstance(mappings, Mapping):
-        view = mappings.values()
-    else:
-        view = mappings
-    return list(map(methodcaller("get", key, default), view))
+from marslab.imgops.debayer import make_bayer, debayer_upsample
+from marslab.imgops.imgutils import get_from_all, absolutely_destroy
+from marslab.imgops.look import compile_look_instruction
 
 
-def unpack_pipeline_specification(func_specification_dict: Optional[Mapping]):
-    if func_specification_dict is None:
-        return None
-    func = curry(func_specification_dict.get("function"))
-    params = func_specification_dict.get("params", {})
-    return func(**params)
-
-
-def unpack_look_overlay(overlay_specification_dict: Optional[Mapping]):
-    if overlay_specification_dict is None:
-        return None
-    options = overlay_specification_dict.get("options", {})
-    return curry(render_overlay)(**options)
-
-
-def cast_scale(
-    array: np.ndarray,
-    scale: float,
-    offset: float,
-    preserve_constants: Optional[Sequence[float]] = None,
-    float_dtype: np.ScalarType = np.float32,
-) -> np.ndarray:
-    """
-    utility function for scaled loaders in this module. actually apply the
-    scale and offset specified in the file. if the array is an integer dtype,
-    first cast it to a float dtype for better constant preservation and
-    interoperability. could be made minimally more efficient, if it mattered.
-    """
-    if array.dtype.char in np.typecodes["AllInteger"]:
-        scaled = array.astype(float_dtype).copy()
-    else:
-        scaled = array.copy()
-    if preserve_constants is None:
-        preserve_constants = []
-    not_special = scaled[np.isin(scaled, preserve_constants, invert=True)]
-    not_special *= scale
-    not_special += offset
-    scaled[np.isin(scaled, preserve_constants, invert=True)] = not_special
-    return scaled
-
-
-def rasterio_scaler(
-    reader: "rasterio.DatasetReader",
-    preserve_constants: Optional[Sequence[float]] = None,
-    float_dtype: np.ScalarType = np.float32,
-) -> Callable[[np.ndarray, int], np.ndarray]:
-    """
-    make a scaling function for a particular DatasetReader object
-    """
-
-    def scaler(array, band_ix):
-        if reader.scales is None:
-            scale = 1
-        else:
-            scale = reader.scales[band_ix]
-        if reader.offsets is None:
-            offset = 0
-        else:
-            offset = reader.offsets[band_ix]
-        if scale == 1 and offset == 0:
-            return array
-        return cast_scale(
-            array, scale, offset, preserve_constants, float_dtype
-        )
-
-    return scaler
-
-
-def rasterio_load_scaled(
-    path: str, band_df: pd.DataFrame, bands: pd.Series, **scale_kwargs
-):
-    """
-    simple rasterio-based image loading function that reads an image in and
-    scales it if applicable
-    """
-    import rasterio
-
-    band_arrays = {}
-    reader = rasterio.open(path)
-    scaler = rasterio_scaler(reader, **scale_kwargs)
-    for _, band in band_df.iterrows():
-        if band["BAND"] not in bands.values:
-            continue
-        band_arrays[band["BAND"]] = scaler(
-            reader.read(int(band["IX"] + 1)),
-            band["IX"],
-        )
-    return band_arrays
-
-
-def pdr_scaler(
-    data: "pdr.Data",
-    preserve_constants: Sequence[float] = None,
-    float_dtype=np.float32,
-) -> Callable[[np.ndarray, int], np.ndarray]:
-    """
-    make a scaling function for a particular DatasetReader object
-    """
-
-    def scaler(image, band_ix):
-        if len(image.shape) == 3:
-            image = image[band_ix].copy()
-        else:
-            image = image.copy()
-        if "SCALING_FACTOR" not in data.LABEL["IMAGE"].keys():
-            # in the context of ZCAM, iof_est / EPO-style
-            # float32 IOFs based on RAF-type products
-            return image
-        # leaving special constants as they are
-        scale = data.LABEL["IMAGE"]["SCALING_FACTOR"]
-        offset = data.LABEL["IMAGE"]["OFFSET"]
-        return cast_scale(
-            data.IMAGE, scale, offset, preserve_constants, float_dtype
-        )
-
-    return scaler
-
-
-def pdr_load_scaled(path: str, band_df: pd.DataFrame, bands: pd.Series):
-    """
-    simple pdr-based image loading function that reads an image in and
-    scales it if applicable
-    """
-    import pdr
-
-    band_arrays = {}
-    data = pdr.read(path)
-    scaler = pdr_scaler(data)
-    for _, band in band_df.iterrows():
-        if band["BAND"] not in bands.values:
-            continue
-        band_arrays[band["BAND"]] = scaler(data.IMAGE, band["IX"])
-    return band_arrays
-
-
-def make_look_pipeline(
-    looker=None,
-    cropper=None,
-    prefilter=None,
-    postfilter=None,
-    plotter=None,
-    broadcast_prefilter=True,
-):
-    # by default, wrap the prefilter function so that it works on each channel;
-    # some notional prefilters may of course not want this!
-    if (broadcast_prefilter is True) and (prefilter is not None):
-        prefilter = broadcast_filter(prefilter)
-    pipeline = []
-    for process in filter(
-        None, (cropper, prefilter, looker, postfilter, plotter)
-    ):
-        pipeline.append(process)
-    return compose_left(*pipeline)
-
-
-def interpret_operation_name(operation):
-    if operation in marslab.spectops.SPECTOP_NAMES:
-        return curry(make_spectral_rapidlook)(
-            spectop=getattr(marslab.spectops, operation)
-        )
-    elif operation in ("enhanced color", "true color", "composite"):
-        return curry(render_rgb_composite)
-    elif operation == "dcs":
-        return curry(decorrelation_stretch)
-    else:
-        raise ValueError("unknown look operation " + operation)
-
-
-# noinspection PyArgumentList
 class BandSet:
+    """
+    class for organizing and performing bulk rendering operations on
+    multispectral image products
+    """
     # TODO: do I need to allow more of these on init? like for copying? maybe?
     def __init__(
         self,
         metadata=None,
         rois=None,
         bayer_info=None,
-        load_method=rasterio_load_scaled,
+        load_method=None,
         name=None,
         threads=None,
     ):
@@ -270,10 +91,18 @@ class BandSet:
             if getattr(self, mapping) is None:
                 setattr(self, mapping, {})
         self.cache_names = ("raw", "debayered", "looks")
+        if self.load_method is None:
+            from marslab.imgops.loaders import rasterio_load_scaled
+
+            self.load_method = rasterio_load_scaled
 
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
-            return Pool(self.threads.get(thread_type))
+            # return Pool(self.threads.get(thread_type))
+            pool = ProcessingPool(self.threads.get(thread_type))
+            pool.restart()
+            return pool
+
         return None
 
     def load(
@@ -298,7 +127,7 @@ class BandSet:
         for path, band_df in chunked_by_file:
             if pool is not None:
                 band_results.append(
-                    pool.apply_async(self.load_method, (path, band_df, bands))
+                    pool.apipe(self.load_method, path, band_df, bands)
                 )
             else:
                 band_results.append(self.load_method(path, band_df, bands))
@@ -379,24 +208,27 @@ class BandSet:
         don't set None for non-debayered images: debayer availability
         should be visible by looking at bandset.debayered's keys
         """
-        pool = self.setup_pool("debayer")
-        if pool is not None:
-            db = pool.map_async(self.debayer_if_required, bands)
-            pool.close()
-            pool.join()
-            # this is like the unthreaded case
-            # except that we get the debayer object as a chunk
-            self.debayered = {
-                band: array_or_none
-                for band, array_or_none in zip(
-                    filter(lambda x: x is not None, bands), db.get()
-                )
-            }
-            return
         for band in bands:
             debayer = self.debayer_if_required(band)
             if debayer is not None:
                 self.debayered[band] = debayer
+        # TODO: threading isn't working. this is not presently a performance
+        #  concern because debayering is not a serious bottleneck for things
+        #  we're doing
+        # pool = self.setup_pool("debayer")
+        # if pool is not None:
+        #     db = pool.map_async(self.debayer_if_required, bands)
+        #     pool.close()
+        #     pool.join()
+        #     # this is like the unthreaded case
+        #     # except that we get the debayer object as a chunk
+        #     self.debayered = {
+        #         band: array_or_none
+        #         for band, array_or_none in zip(
+        #             filter(lambda x: x is not None, bands), db.get()
+        #         )
+        #     }
+        #     return
 
     def get_band(self, band: str):
         """
@@ -444,50 +276,40 @@ class BandSet:
         # TODO, maybe: print skipping messages
         look_cache = {}
         pool = self.setup_pool("look")
-        for inst in available_instructions.values():
+        for instruction in available_instructions.values():
             # do we have a special name? TODO: make this more opinionated?
-            op_name = inst.get("name")
+            op_name = instruction.get("name")
             if op_name is None:
-                op_name = inst["operation"]
-            if not inst.get("no_band_names"):
-                op_name += " " + "_".join(inst["bands"])
+                op_name = instruction["operation"]
+            if not instruction.get("no_band_names"):
+                op_name += " " + "_".join(instruction["bands"])
             print("generating " + op_name)
-            op_images = [self.get_band(band).copy() for band in inst["bands"]]
-            # get heart of pipeline: the look function (spectrum op, dcs, etc.)
-            looker = interpret_operation_name(inst["operation"])
-            # this is a curried function. bind options and auxiliary info:
-            looker = looker(
-                **inst.get("look_params", {}),
-            )
-            # add wavelength values to spectops -- others don't care as of now
-            if looker.func.__name__ == "make_spectral_rapidlook":
-                looker = looker(wavelengths=self.wavelength(inst["bands"]))
+            op_images = [
+                self.get_band(band).copy() for band in instruction["bands"]
+            ]
+            base_image = None
+            if instruction.get("overlay") is not None:
+                base_image = self.get_band(
+                    instruction["overlay"]["band"]
+                ).copy()
+            # make processing pipeline fron instruction
+            pipeline = compile_look_instruction(instruction)
+            # get per-band nominal wavelength values (actually relevant only
+            # to spectops at present)
+            wavelengths = self.wavelength(instruction["bands"])
             # all of cropper, pre, post, overlay can potentially be absent --
             # these are _possible_ steps in the pipeline.
-            cropper = curry(crop_all)(bounds=inst.get("crop"))
-            pre = unpack_pipeline_specification(inst.get("prefilter"))
-            post = unpack_pipeline_specification(inst.get("postfilter"))
-            overlay = unpack_look_overlay(inst.get("overlay"))
-            # grab base image layer if we're making an overlay
-            if overlay is not None:
-                base_image = cropper(
-                    [self.get_band(inst["overlay"]["band"]).copy()]
-                )[0]
-                plotter = overlay(base_image=base_image)
-            # finally, are we rendering a matplotlib image, and if so, how?
-            # TODO: maybe this should be merged in some way with overlay,
-            #  which is in and of itself a fancy matplotlib trick --
-            #  or the overlay should be performed differently?
-            else:
-                plotter = unpack_pipeline_specification(
-                    inst.get("mpl_settings")
-                )
-            pipeline = make_look_pipeline(looker, cropper, pre, post, plotter)
-
             if pool is not None:
-                look_cache[op_name] = pool.apply_async(pipeline, op_images)
+                look_cache[op_name] = pool.apipe(
+                    pipeline,
+                    op_images,
+                    wavelengths=wavelengths,
+                    base_image=base_image,
+                )
             else:
-                look_cache[op_name] = pipeline(op_images)
+                look_cache[op_name] = pipeline(
+                    op_images, wavelengths=wavelengths, base_image=base_image
+                )
         if pool is not None:
             pool.close()
             pool.join()

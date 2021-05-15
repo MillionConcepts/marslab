@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 from more_itertools import windowed
 
-from marslab.imgops import RGGB_PATTERN, count_rois_on_image, make_bayer
-
+from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
+from marslab.imgops.regions import count_rois_on_image
 WAVELENGTH_TO_FILTER = {
     "ZCAM": {
         "L": {

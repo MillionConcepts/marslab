@@ -30,6 +30,7 @@ setup(
         "more-itertools",
         "pathos",
         "cytoolz",
-        "rasterio"
+        "rasterio",
+        "pathos"
     ],
 )

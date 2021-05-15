@@ -15,7 +15,7 @@ import pandas as pd
 import scipy.io
 from astropy.io import fits
 
-from marslab import imgops
+from marslab.imgops.regions import make_roi_hdu
 from marslab.compat.xcam import (
     make_xcam_filter_dict,
     WAVELENGTH_TO_FILTER,
@@ -396,7 +396,7 @@ def roi_hdu_from_sel(
     roi_array = select_roi_by_ix(sel_image, color_ix)
     color_name = roi_color_ix_to_color_name(color_ix, instrument)
     merspect_metadata = {"EYE": eye_name, "SOURCEFN": Path(sel_fn).name}
-    roi_hdu = imgops.make_roi_hdu(roi_array, color_name, merspect_metadata)
+    roi_hdu = make_roi_hdu(roi_array, color_name, merspect_metadata)
     roi_hdu.name = color_name + " " + eye_name
     return roi_hdu
 
