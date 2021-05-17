@@ -18,9 +18,9 @@ import numpy as np
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import (
-    apply_image_filter,
     normalize_range,
-    eightbit, enhance_color,
+    eightbit,
+    enhance_color,
 )
 from marslab.imgops.pltutils import (
     set_colorbar_font,
@@ -45,7 +45,8 @@ def decorrelation_stretch(
     (github.com/lbrabec/decorrstretch) and Christian Tate (unreleased).
     """
     working_array = np.dstack(channels)
-    # TODO: this is not a good general case solution
+    # TODO: this is not a good general case solution, might need to use masked
+    #  arrays or some handrolled analog
     if special_constants is not None:
         working_array = np.where(
             np.isin(working_array, special_constants), 0, working_array
@@ -88,9 +89,11 @@ def decorrelation_stretch(
         + offset
     )
     dcs_array = dcs_vectors.reshape(input_shape)
+
+    # special limiter included ensuite
     if contrast_stretch is None:
         return normalize_range(dcs_array)
-    return enhance_color(dcs_array, 0, 1, contrast_stretch, contrast_stretch)
+    return enhance_color(dcs_array, (0, 1), contrast_stretch)
 
 
 def render_overlay(
@@ -102,6 +105,14 @@ def render_overlay(
     overlay_opacity=0.5,
     mpl_settings=None,
 ):
+    """
+    TODO: this is a bit of a hack. consider finding a cleaner way to do the
+      compositing without necessarily returning a Figure, even if mpl is used
+      as an intermediate step sometimes -- although to later make a colorbar
+      correctly, if there is no ScalarMappable, range state will have to be
+      stored separately, which is ugly and circuitous. so maybe no intermediate
+      possibility, or at least intent
+    """
     norm = plt.Normalize(vmin=overlay_image.min(), vmax=overlay_image.max())
     fig = plt.figure()
     ax = fig.add_subplot()
@@ -112,7 +123,7 @@ def render_overlay(
         pad=0.04,
         alpha=overlay_opacity,
     )
-    base_image = normalize_range(base_image, 0, 1, 1, 1)
+    base_image = normalize_range(base_image, (0, 1), 1)
     if isinstance(base_cmap, str):
         base_cmap = cm.get_cmap(base_cmap)
     if isinstance(overlay_cmap, str):
@@ -128,37 +139,22 @@ def render_overlay(
     return fig
 
 
-def render_rgb_composite(
-    channels,
-    *,
-    special_constants=None,
-    normalize=(0, 1, 0, 0),
-    image_filter=None,
-    render_mpl=False,
-    prefilter=None,
-):
+def render_rgb_composite(channels, *, special_constants=None):
     """
     render a composited image from three input channels. this is a good basis
     for producing both "true-color" and "enhanced-color" images from most
     filter sets.
 
+    TODO: following is no longer true. move this as an interpretation step to
+      Look.compile_from_instruction()
     this assumes normalization as a default option because you're presumably
     going to want to view these as "normal" RGB images, not scaled to an
     arbitrary colormap (although aren't they all?).
     """
     assert len(channels) == 3
-    composed = [
-        apply_image_filter(channel.copy(), prefilter) for channel in channels
-    ]
-    composed = np.dstack(composed)
+    composed = np.dstack(channels)
     if special_constants is not None:
         composed = np.where(np.isin(composed, special_constants), 0, composed)
-    if normalize not in (False, None):
-        composed = normalize_range(composed, *normalize)
-    composed = apply_image_filter(composed, image_filter)
-
-    if render_mpl is True:
-        return simple_mpl_figure(composed)
     return composed
 
 
@@ -168,25 +164,16 @@ def spectop_look(
     spectop=None,
     wavelengths=None,
     special_constants=None,
-    clip=None,
     default_value=0,
 ):
-    rapidlook = spectop(images, None, wavelengths)[0]
+    look = spectop(images, None, wavelengths)[0]
     # ignoring nans and special constants in scaling
-    rapidlook[np.where(np.isnan(rapidlook))] = default_value
-    rapidlook[np.where(np.isinf(rapidlook))] = default_value
+    look[np.where(np.isnan(look))] = default_value
+    look[np.where(np.isinf(look))] = default_value
     if special_constants is not None:
         for image in images:
-            rapidlook[
-                np.where(np.isin(image, special_constants))
-            ] = default_value
-    if clip is not None:
-        if "params" in clip.keys():
-            params = clip["params"]
-        else:
-            params = {}
-        rapidlook = clip["function"](rapidlook, **params)
-    return rapidlook
+            look[np.where(np.isin(image, special_constants))] = default_value
+    return look
 
 
 # TODO: cruft, this should be handled by RGBset

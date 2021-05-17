@@ -42,10 +42,10 @@ def absolutely_destroy(thing):
     gc.collect()
 
 
-def eightbit(array, cheat_low=0, cheat_high=0):
+def eightbit(array, stretch=(0,0)):
     """return an eight-bit version of an array"""
     return np.round(
-        normalize_range(array, 0, 255, cheat_low, cheat_high)
+        normalize_range(array, (0, 255), stretch)
     ).astype(np.uint8)
 
 
@@ -86,12 +86,11 @@ def split_filter(
     recomposes them
     """
 
-    def multi(
-        array, *, set_axis: int = axis, **kwargs
-    ) -> np.ndarray:
+    def multi(array, *, set_axis: int = axis, **kwargs) -> np.ndarray:
         filt = partial(filter_function, **kwargs)
         filtered = map(filt, np.split(array, array.shape[set_axis], set_axis))
         return np.concatenate(tuple(filtered), axis=set_axis)
+
     return multi
 
 
@@ -108,13 +107,20 @@ def map_filter(filter_function: Callable) -> Callable:
 
 
 def normalize_range(
-    image, range_min=0, range_max=1, cheat_low=None, cheat_high=None
+    image,
+    bounds=(0, 1),
+    stretch=None,
 ):
     """
     simple linear min-max scaler that optionally cuts off low and high
     percentiles of the input
     """
     working_image = image.copy()
+    if isinstance(stretch, Sequence):
+        cheat_low, cheat_high = stretch
+    else:
+        cheat_low, cheat_high = (stretch, stretch)
+    range_min, range_max = bounds
     if cheat_low is not None:
         minimum = np.percentile(image, cheat_low).astype(image.dtype)
     else:
@@ -130,16 +136,12 @@ def normalize_range(
     )
 
 
-def enhance_color(
-    image, range_min=0, range_max=1, cheat_low=None, cheat_high=None
-):
+def enhance_color(image: np.ndarray, bounds, stretch):
     """
     wrapper for normalize_range -- normalize each channel individually,
     conventional "enhanced color" operation
     """
-    return split_filter(normalize_range)(
-        image, range_min=range_min, range_max=range_max, cheat_low=cheat_low, cheat_high=cheat_high
-    )
+    return split_filter(normalize_range)(image, bounds=bounds, stretch=stretch)
 
 
 def std_clip(image, sigma=1):
@@ -152,12 +154,16 @@ def std_clip(image, sigma=1):
     return np.clip(image, *(mean - std * sigma, mean + std * sigma))
 
 
-def minmax_clip(image, cheat_low=0, cheat_high=0):
+def minmax_clip(image, stretch=(0, 0)):
     """
     simple minmax clip that optionally cheats 0 up and 1 down at multiples
     of an array's dynamic range
     """
-    dynamic_range = image.max() - image.min()
+    if stretch != (0, 0):
+        dynamic_range = image.max() - image.min()
+        cheat_low, cheat_high = stretch
+    else:
+        dynamic_range, cheat_low, cheat_high = (0, 0, 0)
     return np.clip(
         image,
         image.min() + dynamic_range * cheat_low,
