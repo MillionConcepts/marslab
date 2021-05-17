@@ -135,3 +135,7 @@ dmypy.json
 # test files
 
 test_output/*
+
+# development
+*scratch.py
+*scratch.ipynb

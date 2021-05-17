@@ -31,3 +31,18 @@ def set_colorbar_font(colorbar, colorbar_fp):
         tick.set_font_properties(colorbar_fp)
     colorbar.ax.get_yaxis().get_offset_text().set_font_properties(colorbar_fp)
 
+
+def set_label(
+    fig, text, ax_ix=0, fontproperties=None, loc="center", x_or_y="x"
+):
+    """
+    convenience wrapper for mpl.axes._subplots.AxesSubplot.xlabel / ylabel
+    """
+    ax = fig.axes[ax_ix]
+    if x_or_y == "x":
+        method = ax.set_xlabel
+    elif x_or_y == "y":
+        method = ax.set_ylabel
+    else:
+        raise ValueError('x_or_y should be "x" or "y"')
+    return method(text, loc=loc, fontproperties=fontproperties)

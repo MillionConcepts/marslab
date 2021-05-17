@@ -9,9 +9,10 @@ from collections.abc import (
     Collection,
 )
 import gc
+from functools import partial
 from operator import methodcaller
 import sys
-from typing import Union
+from typing import Union, Any
 
 import numpy as np
 
@@ -77,26 +78,24 @@ def crop_all(
 
 def split_filter(
     filter_function: Callable, axis: int = -1
-) -> Callable[[np.ndarray, int], np.ndarray]:
+) -> Callable[[np.ndarray, Any], np.ndarray]:
     """
     produce a 'split' version of a filter that applies itself to slices across
     a particular axis -- e.g., take a gaussian blur function, return a function
     that applies a gaussian blur to R / G / B channels separately and then
     recomposes them
     """
-    from cytoolz.functoolz import curry
 
     def multi(
-        array: np.ndarray, *args, axis: int = axis, **kwargs
+        array, *, set_axis: int = axis, **kwargs
     ) -> np.ndarray:
-        filt = curry(filter_function)(*args, **kwargs)
-        filtered = list(map(filt, np.split(array, array.shape[axis], axis)))
-        return np.concatenate(tuple(filtered), axis=axis)
-
+        filt = partial(filter_function, **kwargs)
+        filtered = map(filt, np.split(array, array.shape[set_axis], set_axis))
+        return np.concatenate(tuple(filtered), axis=set_axis)
     return multi
 
 
-def broadcast_filter(filter_function: Callable) -> Callable:
+def map_filter(filter_function: Callable) -> Callable:
     """
     returns a version of a function that automatically maps itself across all
     elements of a collection
@@ -131,6 +130,18 @@ def normalize_range(
     )
 
 
+def enhance_color(
+    image, range_min=0, range_max=1, cheat_low=None, cheat_high=None
+):
+    """
+    wrapper for normalize_range -- normalize each channel individually,
+    conventional "enhanced color" operation
+    """
+    return split_filter(normalize_range)(
+        image, range_min=range_min, range_max=range_max, cheat_low=cheat_low, cheat_high=cheat_high
+    )
+
+
 def std_clip(image, sigma=1):
     """
     simple clipping function that clips at multiples of an array's standard
@@ -152,11 +163,6 @@ def minmax_clip(image, cheat_low=0, cheat_high=0):
         image.min() + dynamic_range * cheat_low,
         image.max() - dynamic_range * cheat_high,
     )
-
-
-# TODO: this should maybe be replaced with calls to np.concat or np._stack
-def depth_stack(images):
-    return np.moveaxis(np.array(images), (0, 1), (2, 0))
 
 
 def bilinear_interpolate(

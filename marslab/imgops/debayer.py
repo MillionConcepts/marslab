@@ -7,7 +7,7 @@ from typing import Union
 import numpy as np
 
 # bayer pattern definitions
-from marslab.imgops.imgutils import bilinear_interpolate_subgrid, depth_stack
+from marslab.imgops.imgutils import bilinear_interpolate_subgrid
 
 RGGB_PATTERN = {
     "red": (0, 0),
@@ -100,5 +100,5 @@ def debayer_upsample(
         )
     if len(upsampled_images) == 1:
         return upsampled_images[0]
-    return np.mean(depth_stack(upsampled_images), axis=-1)
+    return np.mean(np.dstack(upsampled_images), axis=-1)
 

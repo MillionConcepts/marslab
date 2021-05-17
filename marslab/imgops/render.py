@@ -19,9 +19,8 @@ import numpy as np
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import (
     apply_image_filter,
-    depth_stack,
     normalize_range,
-    eightbit,
+    eightbit, enhance_color,
 )
 from marslab.imgops.pltutils import (
     set_colorbar_font,
@@ -35,9 +34,6 @@ def decorrelation_stretch(
     *,
     contrast_stretch=None,
     special_constants=None,
-    image_filter=None,
-    render_mpl=False,
-    prefilter=None,
     sigma=None,
 ):
     """
@@ -48,10 +44,7 @@ def decorrelation_stretch(
     Work towards this adaptation is partly due to lbrabec
     (github.com/lbrabec/decorrstretch) and Christian Tate (unreleased).
     """
-    channels = [
-        apply_image_filter(channel.copy(), prefilter) for channel in channels
-    ]
-    working_array = depth_stack(channels)
+    working_array = np.dstack(channels)
     # TODO: this is not a good general case solution
     if special_constants is not None:
         working_array = np.where(
@@ -64,9 +57,9 @@ def decorrelation_stretch(
     else:
         working_dtype = channel_vectors.dtype
     channel_covariance = np.cov(channel_vectors.T, dtype=working_dtype)
-    # target per-channel standard deviation as a diagonalized matrix,
-    # here simply set equal to per-channel input standard deviation,
-    # unless sigma is passed.
+    # target per-channel standard deviation as a diagonalized matrix.
+    # set equal to sigma if sigma is passed; otherwise simply set
+    # equal to per-channel input standard deviation
     if sigma is not None:
         channel_sigmas = np.diag(
             np.array([sigma for _ in range(len(channels))])
@@ -95,17 +88,9 @@ def decorrelation_stretch(
         + offset
     )
     dcs_array = dcs_vectors.reshape(input_shape)
-    if contrast_stretch is not None:
-        # optionally apply linear contrast stretch
-        for channel_ix in range(dcs_array.shape[-1]):
-            channel = dcs_array[..., channel_ix]
-            dcs_array[..., channel_ix] = normalize_range(
-                channel, 0, 1, contrast_stretch, contrast_stretch
-            )
-    dcs_array = apply_image_filter(dcs_array, image_filter)
-    if render_mpl is True:
-        return simple_mpl_figure(dcs_array)
-    return dcs_array
+    if contrast_stretch is None:
+        return normalize_range(dcs_array)
+    return enhance_color(dcs_array, 0, 1, contrast_stretch, contrast_stretch)
 
 
 def render_overlay(
@@ -165,7 +150,7 @@ def render_rgb_composite(
     composed = [
         apply_image_filter(channel.copy(), prefilter) for channel in channels
     ]
-    composed = depth_stack(composed)
+    composed = np.dstack(composed)
     if special_constants is not None:
         composed = np.where(np.isin(composed, special_constants), 0, composed)
     if normalize not in (False, None):
@@ -241,7 +226,7 @@ def rgb_from_bayer(
                 row_column=bayer_row_column,
             )
         )
-    return depth_stack(channels)
+    return np.dstack(channels)
 
 
 def make_thumbnail(
@@ -278,6 +263,10 @@ def colormapped_plot(
     colorbar_fp=None,
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
+    # TODO: hacky bailout if this is stuck on the end of a pipeline it
+    #   shouldn't be, remove this or something
+    if isinstance(array, mpl.figure.Figure):
+        return array
     norm = plt.Normalize(vmin=array.min(), vmax=array.max())
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)

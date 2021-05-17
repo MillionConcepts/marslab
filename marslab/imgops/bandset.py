@@ -18,7 +18,7 @@ import pandas as pd
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import get_from_all, absolutely_destroy
-from marslab.imgops.look import compile_look_instruction
+from marslab.imgops.look import Look
 
 
 class BandSet:
@@ -26,6 +26,7 @@ class BandSet:
     class for organizing and performing bulk rendering operations on
     multispectral image products
     """
+
     # TODO: do I need to allow more of these on init? like for copying? maybe?
     def __init__(
         self,
@@ -280,7 +281,7 @@ class BandSet:
             # do we have a special name? TODO: make this more opinionated?
             op_name = instruction.get("name")
             if op_name is None:
-                op_name = instruction["operation"]
+                op_name = instruction["look"]
             if not instruction.get("no_band_names"):
                 op_name += " " + "_".join(instruction["bands"])
             print("generating " + op_name)
@@ -293,22 +294,24 @@ class BandSet:
                     instruction["overlay"]["band"]
                 ).copy()
             # make processing pipeline fron instruction
-            pipeline = compile_look_instruction(instruction)
+            pipeline = Look.compile_from_instruction(
+                instruction, metadata=self.metadata
+            )
             # get per-band nominal wavelength values (actually relevant only
             # to spectops at present)
-            wavelengths = self.wavelength(instruction["bands"])
+            # wavelengths = self.wavelength(instruction["bands"])
             # all of cropper, pre, post, overlay can potentially be absent --
             # these are _possible_ steps in the pipeline.
             if pool is not None:
                 look_cache[op_name] = pool.apipe(
-                    pipeline,
+                    pipeline.execute,
                     op_images,
-                    wavelengths=wavelengths,
+                    # wavelengths=wavelengths,
                     base_image=base_image,
                 )
             else:
-                look_cache[op_name] = pipeline(
-                    op_images, wavelengths=wavelengths, base_image=base_image
+                look_cache[op_name] = pipeline.execute(
+                    op_images, base_image=base_image
                 )
         if pool is not None:
             pool.close()
