@@ -59,15 +59,15 @@ class Pipeline:
 
     inserts: dict of index: args/kwargs to be added to function at that step
     in pipeline, or just sequence of None / args/kwargs; can also give
-    index:None to defer argument passes until Pipeline.call() currently only
-    one insert per step is supported sends: dict of index: function to call
+    index:None to defer argument pass to runtime; currently only
+    one insert per step is supported 
+    sends: dict of index: function to call
     with the state at that step in pipeline, or just sequence of None /
-    function currently only one send per step is supported loops: dict of (
-    index, index): function to call with the state at that step in pipeline,
-    step in pipeline to return that index currently only one return per step
-    is supported parameters: dict of (index or function name, args/kwargs to
-    bind to pipeline) TODO: consider making send/insert/return indices named
-    attachment points?
+    function currently only one send per step is supported 
+    loops: dict of (index, index): function to call with the state at that step in pipeline,
+    step in pipeline to return evaluation result; not currently supported
+    parameters: dict of (index or function name, args/kwargs to
+    bind to pipeline
     """
 
     def __init__(
