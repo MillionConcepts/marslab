@@ -154,6 +154,7 @@ def std_clip(image, sigma=1):
     return np.clip(image, *(mean - std * sigma, mean + std * sigma))
 
 
+# TODO: is this cruft?
 def minmax_clip(image, stretch=(0, 0)):
     """
     simple minmax clip that optionally cheats 0 up and 1 down at multiples
