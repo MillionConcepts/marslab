@@ -18,6 +18,8 @@ from numpy.linalg import norm
 import pandas as pd
 
 
+# TODO: make all kwarg signatures flatly identical
+
 def preprocess_input(reflectance, errors=None, wavelengths=None):
     """
     did someone pass this function something silly? raise an issue.

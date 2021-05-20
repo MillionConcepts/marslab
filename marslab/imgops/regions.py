@@ -104,3 +104,9 @@ def make_roi_hdu(input_array, roi_name, metadata_dict):
         roi_hdu.header[field] = value
     roi_hdu.name = roi_name
     return roi_hdu
+
+
+def select_roi_by_ix(rois: np.ndarray, color_ix: int) -> np.ndarray:
+    roi = np.zeros(shape=rois.shape, dtype=rois.dtype)
+    roi[np.where(rois == color_ix)] = 1
+    return roi

@@ -1,16 +1,21 @@
 """
 generic image-loading functions for multispectral ops
 """
-
+import sys
 from collections.abc import Callable, Sequence
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Union
 
 import numpy as np
 
 if TYPE_CHECKING:
-    import pandas as pd
     import rasterio
     import pdr
+    import pandas as pd
+
+
+def dont_scale(array, *_, **__):
+    """identity function plus a black hole for args and kwargs"""
+    return array
 
 
 def cast_scale(
@@ -22,7 +27,7 @@ def cast_scale(
 ) -> np.ndarray:
     """
     utility function for scaled loaders in this module. actually apply the
-    scale and offset specified in the file. if the array is an integer dtype,
+    do_scale and offset specified in the file. if the array is an integer dtype,
     first cast it to a float dtype for better constant preservation and
     interoperability. could be made minimally more efficient, if it mattered.
     """
@@ -37,6 +42,42 @@ def cast_scale(
     not_special += offset
     scaled[np.isin(scaled, preserve_constants, invert=True)] = not_special
     return scaled
+
+
+def prep_scaled_loader(
+    metadata, bands, image, scaler_factory, scale, **scale_kwargs
+):
+    """
+    generic prep function for scaled loaders
+    """
+    if scale is False:
+        scaler = dont_scale
+    else:
+        scaler = scaler_factory(image, **scale_kwargs)
+        bands, metadata = unpack_pd_bands(bands, metadata)
+    # if no band metadata is passed, just enumerate the bands
+    if len(image.shape) != 3:
+        band_count = 1
+    else:
+        band_count = image.shape[-1]
+    if metadata is None:
+        metadata = [{"BAND": ix, "IX": ix} for ix in range(band_count)]
+    # if bands aren't passed, get everything
+    if bands is None:
+        bands = [ix for ix in range(band_count)]
+    return scaler, metadata, bands
+
+
+def unpack_pd_bands(bands, metadata):
+    if "pandas" not in sys.modules:
+        return bands, metadata
+    import pandas as pd
+
+    if isinstance(bands, pd.Series):
+        bands = bands.values
+    if isinstance(metadata, pd.DataFrame):
+        metadata = metadata.to_dict(orient="records")
+    return bands, metadata
 
 
 def rasterio_scaler(
@@ -66,8 +107,12 @@ def rasterio_scaler(
     return scaler
 
 
-def rasterio_load_scaled(
-    path: str, band_df: "pd.DataFrame", bands: "pd.Series", **scale_kwargs
+def rasterio_load(
+    path: str,
+    metadata: Optional["pd.DataFrame"] = None,
+    bands: Optional[Sequence[Union[str, int]]] = None,
+    do_scale=True,
+    **scale_kwargs
 ):
     """
     simple rasterio-based image loading function that reads an image in and
@@ -75,15 +120,18 @@ def rasterio_load_scaled(
     """
     import rasterio
 
-    band_arrays = {}
     reader = rasterio.open(path)
-    scaler = rasterio_scaler(reader, **scale_kwargs)
-    for _, band in band_df.iterrows():
-        if band["BAND"] not in bands.values:
+    scaler_factory = rasterio_scaler
+    scaler, metadata, bands = prep_scaled_loader(
+        metadata, bands, reader, scaler_factory, do_scale, **scale_kwargs
+    )
+    band_arrays = {}
+    for record in metadata:
+        if record["BAND"] not in bands:
             continue
-        band_arrays[band["BAND"]] = scaler(
-            reader.read(int(band["IX"] + 1)),
-            band["IX"],
+        band_arrays[record["BAND"]] = scaler(
+            reader.read(int(record["IX"] + 1)),
+            record["IX"],
         )
     return band_arrays
 
@@ -114,18 +162,71 @@ def pdr_scaler(
     return scaler
 
 
-def pdr_load_scaled(path: str, band_df: "pd.DataFrame", bands: "pd.Series"):
+def pdr_load(
+    path: str,
+    metadata: Optional["pd.DataFrame"] = None,
+    bands: Optional[Sequence[Union[str, int]]] = None,
+    do_scale=True,
+    **scale_kwargs
+):
     """
     simple pdr-based image loading function that reads an image in and
-    scales it if applicable
+    scales it if requested and applicable
     """
     import pdr
 
-    band_arrays = {}
     data = pdr.read(path)
-    scaler = pdr_scaler(data)
-    for _, band in band_df.iterrows():
-        if band["BAND"] not in bands.values:
+    scaler_factory = pdr_scaler
+    scaler, metadata, bands = prep_scaled_loader(
+        metadata, bands, data.IMAGE, scaler_factory, do_scale, **scale_kwargs
+    )
+    band_arrays = {}
+    for record in metadata:
+        if record["BAND"] not in bands:
             continue
-        band_arrays[band["BAND"]] = scaler(data.IMAGE, band["IX"])
+        band_arrays[record["BAND"]] = scaler(data.IMAGE, record["IX"])
     return band_arrays
+
+
+def pil_load_shell(
+    image,
+    metadata: Optional["pd.DataFrame"] = None,
+    bands: Optional[Sequence[Union[str, int]]] = None,
+):
+    bands, metadata = unpack_pd_bands(bands, metadata)
+    # different initialization rules from the scaled loaders
+    if bands is None:
+        bands = image.getbands()
+    if metadata is None:
+        metadata = [{"BAND": band, "IX": band} for band in image.getbands()]
+    band_arrays = {}
+    for record in metadata:
+        if record["BAND"] not in bands:
+            continue
+        band_arrays[record["BAND"]] = np.asarray(
+            image.getchannel(record["IX"])
+        )
+    return band_arrays
+
+
+
+def pil_load(
+    path: str,
+    metadata: Optional["pd.DataFrame"] = None,
+    bands: Optional[Sequence[Union[str, int]]] = None,
+):
+    from PIL import Image
+    image = Image.open(path)
+    return pil_load_shell(image, metadata, bands)
+
+
+# TODO:
+def pil_load_rgb(
+    path: str,
+    metadata: Optional["pd.DataFrame"] = None,
+    bands: Optional[Sequence[Union[str, int]]] = None,
+):
+    from PIL import Image
+    image = Image.open(path)
+    image.convert('RGB')
+    return pil_load_shell(image, metadata, bands)

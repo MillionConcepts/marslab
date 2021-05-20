@@ -5,7 +5,7 @@ instruments (PCAM, MCAM, ZCAM...), affording consistent interpretation
 of operations on individual spectra
 """
 from collections.abc import Mapping, Sequence
-from itertools import chain, combinations, product
+from itertools import chain, combinations
 from math import floor
 from statistics import mean
 from typing import Optional
@@ -14,8 +14,6 @@ import numpy as np
 import pandas as pd
 from more_itertools import windowed
 
-from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
-from marslab.imgops.regions import count_rois_on_image
 WAVELENGTH_TO_FILTER = {
     "ZCAM": {
         "L": {
@@ -214,7 +212,7 @@ def polish_xcam_spectrum(
         mean_value = spectrum.get(real_filter)
         if mean_value is None:
             continue
-        if real_filter.startswith("r"):
+        if real_filter.lower().startswith("r"):
             eye_scale = righteye_scale
         else:
             eye_scale = lefteye_scale
@@ -366,6 +364,9 @@ def count_rois_on_xcam_images(
 
     TODO: too messy.
     """
+    from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
+    from marslab.imgops.regions import count_rois_on_image
+
     roi_listing = []
     # unrolling for easier iteration
     roi_hdus = [roi_hdulist[hdu_ix] for hdu_ix in roi_hdulist]

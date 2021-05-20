@@ -18,6 +18,7 @@ import pandas as pd
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import get_from_all, absolutely_destroy
+from marslab.imgops.loaders import pil_load
 from marslab.imgops.look import Look
 
 
@@ -36,6 +37,7 @@ class BandSet:
         load_method=None,
         name=None,
         threads=None,
+        raw=None
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -72,7 +74,7 @@ class BandSet:
         :param threads -- dict of thread counts for different things
         """
         self.metadata = metadata
-        self.raw = None
+        self.raw = raw
         self.debayered = None
         self.looks = None
         self.thumbs = None
@@ -93,9 +95,9 @@ class BandSet:
                 setattr(self, mapping, {})
         self.cache_names = ("raw", "debayered", "looks")
         if self.load_method is None:
-            from marslab.imgops.loaders import rasterio_load_scaled
+            from marslab.imgops.loaders import rasterio_load
 
-            self.load_method = rasterio_load_scaled
+            self.load_method = rasterio_load
 
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
@@ -332,3 +334,25 @@ class BandSet:
             setattr(self, what, {})
         else:
             raise ValueError(str(what) + " is not a valid cache type.")
+
+
+class ImageBands(BandSet):
+    """
+    simple case of a bandset produced from a single multichannel image.
+    """
+    def __init__(self, path, load_method=None, **bandset_kwargs):
+        if load_method is None:
+            from marslab.imgops.loaders import pil_load
+            load_method = pil_load
+        metadata = pd.DataFrame()
+        metadata['PATH'] = path
+        super().__init__(
+            metadata=metadata,
+            load_method=load_method,
+            **bandset_kwargs
+        )
+        # TODO: stuff about automatically coercing grayscale if desired
+        self.raw = load_method(path)
+        metadata['BAND'] = self.raw.keys()
+        metadata['IX'] = self.raw.keys()
+
