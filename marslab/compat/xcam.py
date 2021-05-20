@@ -5,7 +5,7 @@ instruments (PCAM, MCAM, ZCAM...), affording consistent interpretation
 of operations on individual spectra
 """
 from collections.abc import Mapping, Sequence
-from itertools import chain, combinations, product
+from itertools import chain, combinations
 from math import floor
 from statistics import mean
 from typing import Optional
@@ -13,8 +13,6 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from more_itertools import windowed
-
-from marslab.imgops import RGGB_PATTERN, count_rois_on_image, make_bayer
 
 WAVELENGTH_TO_FILTER = {
     "ZCAM": {
@@ -214,7 +212,7 @@ def polish_xcam_spectrum(
         mean_value = spectrum.get(real_filter)
         if mean_value is None:
             continue
-        if real_filter.startswith("r"):
+        if real_filter.lower().startswith("r"):
             eye_scale = righteye_scale
         else:
             eye_scale = lefteye_scale
@@ -337,11 +335,11 @@ NARROWBAND_TO_BAYER = {
         "L5": ("green_1", "green_2"),
         "L6": "blue",
         "R1": "red",
-        "R2": "red",
-        "R3": "red",
-        "R4": "red",
-        "R5": "red",
-        "R6": "red",
+        "R2": None,
+        "R3": None,
+        "R4": None,
+        "R5": None,
+        "R6": None,
         "L0G": ("green_1", "green_2"),
         "L0B": "blue",
         "L0R": "red",
@@ -352,11 +350,9 @@ NARROWBAND_TO_BAYER = {
 }
 
 
-TREAT_AS_BAYER_OPAQUE = {"ZCAM": ("R2", "R3", "R4", "R5", "R6")}
-
-
 def count_rois_on_xcam_images(
-    roi_hdulist, xcam_image_dict, instrument, pixel_map_dict=None, debayer=True
+    roi_hdulist, xcam_image_dict, instrument,
+    pixel_map_dict=None, bayer_pixel_dict =None,
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -365,11 +361,15 @@ def count_rois_on_xcam_images(
     there are so many potential special cases here that utterly transform
     control flow that we've chosen to structure it differently from the
     quick imaging functions. perhaps this is wrong, though.
+
+    TODO: too messy.
     """
+    from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
+    from marslab.imgops.regions import count_rois_on_image
+
     roi_listing = []
     # unrolling for easier iteration
     roi_hdus = [roi_hdulist[hdu_ix] for hdu_ix in roi_hdulist]
-    # TODO: this is too sloppy
     left_hdus = [
         hdu for hdu in roi_hdus if hdu.header["EYE"].upper() == "LEFT"
     ]
@@ -380,23 +380,21 @@ def count_rois_on_xcam_images(
     left_hdu_names = [hdu.header["NAME"] for hdu in left_hdus]
     right_hdu_arrays = [hdu.data for hdu in right_hdus]
     right_hdu_names = [hdu.header["NAME"] for hdu in right_hdus]
-    for eye, color in product(("L", "R"), ("R", "G", "B")):
-        if eye + "0" in xcam_image_dict.keys():
-            xcam_image_dict[eye + "0" + color] = xcam_image_dict[
-                eye + "0"
-            ].copy()
-    bayer_masks = make_bayer(
-        list(xcam_image_dict.values())[0].shape, RGGB_PATTERN
-    )
+    if bayer_pixel_dict is None:
+        bayer_pixel_dict = NARROWBAND_TO_BAYER[instrument]
+    if not all([pixel is None for pixel in bayer_pixel_dict.values()]):
+        bayer_masks = make_bayer(
+            list(xcam_image_dict.values())[0].shape, RGGB_PATTERN
+        )
+    else:
+        bayer_masks = None
     for filter_name, image in xcam_image_dict.items():
         if filter_name.endswith("0"):
             continue
         # bayer-counting logic
-        if (filter_name not in TREAT_AS_BAYER_OPAQUE[instrument]) and (
-            debayer == True
-        ):
+        if bayer_pixel_dict[filter_name] is not None:
             detector_mask = np.full(image.shape, False)
-            bayer_pixels = NARROWBAND_TO_BAYER[instrument][filter_name]
+            bayer_pixels = bayer_pixel_dict[filter_name]
             if isinstance(bayer_pixels, str):
                 bayer_pixels = [bayer_pixels]
             for pixel in bayer_pixels:
@@ -431,7 +429,7 @@ def count_rois_on_xcam_images(
                 }
             )
     return (
-        pd.DataFrame(roi_listing)
+        pd.DataFrame(roi_listing, dtype=np.float32)
         .pivot_table(columns=["COLOR"])
         .T.reset_index()
     )

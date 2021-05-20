@@ -350,12 +350,17 @@ def site_counter():
     table = {k: v for v, k in enumerate(map(''.join, itertools.islice(itertools.chain(*collection), 32768)))}
     return table
 
+
+# greedily evaluate at import time for efficiency
+SITE_LOOKUP_TABLE = site_counter()
+
+
 def site(fn,ptype="IMAGE"): #fn[28:31])
     val = {'IMAGE':fn[28:31],
            'MOSAIC':fn[16:19]}[ptype]
     if val=='___':
         return 'OUT OF RANGE'
-    return site_counter()[val]
+    return SITE_LOOKUP_TABLE[val]
 
 def drive_counter():
     # generates a lookup table per p185-186 of the SIS,
@@ -370,12 +375,16 @@ def drive_counter():
     table = {k: v for v, k in enumerate(map(''.join, itertools.islice(itertools.chain(*collection), 65536)))}
     return table
 
+# greedily evaluate at import time for efficiency
+DRIVE_LOOKUP_TABLE = drive_counter()
+
+
 def drive(fn,ptype='IMAGE'): #fn[31:35])
     val = {'IMAGE':fn[31:35],
            'MOSAIC':fn[19:23]}[ptype]
     if val=='____':
         return "OUT OF RANGE"
-    return drive_counter()[val]
+    return DRIVE_LOOKUP_TABLE[val]
 
 def sequence(fn): #fn[35:44])
     return fn[35:44]
@@ -385,8 +394,7 @@ def cam_specific(fn): #fn[44:48])
 
 def downsample(fn): #fn[48:49])
     n = int(2**int(fn[48:49]))
-    m = int(2**n)
-    return f"{m}x{m}"
+    return f"{n}x{n}"
 
 def compression(fn): #fn[49:51])
     if fn[49:51].startswith("I"):
@@ -498,7 +506,7 @@ def parse(fn):
     elif ptype=='MESH':
         print('MESH filenames are not yet supported.')
         return
-    # All the ugly conditionalss are just to order the information in the
+    # All the ugly conditionals are just to order the information in the
     # most useful way for display.
     fntable = {}
     fntable['FILENAME'] = fn
