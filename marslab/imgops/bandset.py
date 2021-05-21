@@ -107,6 +107,7 @@ class BandSet:
 
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
+            log.info('... initializing worker pool ...')
             pool = ProcessingPool(self.threads.get(thread_type))
             pool.restart()
             return pool
@@ -286,6 +287,8 @@ class BandSet:
         # TODO, maybe: print skipping messages
         look_cache = {}
         pool = self.setup_pool("look")
+        if pool is not None:
+            log.info("... serializing arrays ...")
         for instruction in available_instructions.values():
             # do we have a special name? TODO: make this more opinionated?
             op_name = instruction.get("name")
