@@ -152,6 +152,7 @@ class Look(Pipeline, ABC):
             "postfilter",
             "overlay",
             "plotter",
+            "bang"
         )
         steps = {}
         parameters = {}

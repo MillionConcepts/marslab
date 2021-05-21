@@ -2,7 +2,7 @@
 defines a class for organizing and performing bulk rendering operations on
 multispectral image products
 """
-
+import logging
 from collections.abc import Mapping, Collection, Sequence
 from itertools import chain
 from typing import Optional, Union
@@ -18,8 +18,14 @@ import pandas as pd
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import get_from_all, absolutely_destroy
-from marslab.imgops.loaders import pil_load
 from marslab.imgops.look import Look
+from marslab.imgops.poolutils import (
+    simple_log_callback,
+    watch_pool,
+    wait_for_it,
+)
+
+log = logging.getLogger(__name__)
 
 
 class BandSet:
@@ -37,7 +43,7 @@ class BandSet:
         load_method=None,
         name=None,
         threads=None,
-        raw=None
+        raw=None,
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -101,7 +107,6 @@ class BandSet:
 
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
-            # return Pool(self.threads.get(thread_type))
             pool = ProcessingPool(self.threads.get(thread_type))
             pool.restart()
             return pool
@@ -120,25 +125,27 @@ class BandSet:
         if reload is False:
             bands = bands.loc[~bands.isin(self.raw.keys())]
         if (quiet is False) and not (bands.isin(load_df["BAND"]).all()):
-            print("Not all requested bands are available.")
+            log.info("Not all requested bands are available.")
         # group bands by file -- for instruments like MASTCAM, this is a
         # one-row / band df per file; for RGB images, three rows per file; for
         # instruments like Kaguya or Supercam, dozens or hundreds per file.
         loading = load_df.loc[load_df["BAND"].isin(bands)]
         chunked_by_file = loading.dropna(subset=["PATH"]).groupby("PATH")
-        band_results = []
-        for path, band_df in chunked_by_file:
-            if pool is not None:
-                band_results.append(
-                    pool.apipe(self.load_method, path, band_df, bands)
+        # TODO, maybe: dispatch single and multithreaded cases separately?
+        if pool is None:
+            results = []
+            for path, band_df in chunked_by_file:
+                results.append(self.load_method(path, band_df, bands))
+                log.info("loaded " + path)
+        else:
+            results = {}
+            # caution: dict comprehension does _not_ work well here
+            for path, band_df in chunked_by_file:
+                results[path] = pool.apipe(
+                    self.load_method, path, band_df, bands
                 )
-            else:
-                band_results.append(self.load_method(path, band_df, bands))
-        if pool is not None:
-            pool.close()
-            pool.join()
-            band_results = [result.get() for result in band_results]
-        self.raw |= merge(band_results)
+            results = wait_for_it(pool, results, log)
+        self.raw |= merge(results)
 
     def make_db_masks(self, shape: Sequence[int, int] = None, remake=False):
         if "masks" in self.bayer_info.keys():
@@ -286,7 +293,6 @@ class BandSet:
                 op_name = instruction["look"]
             if not instruction.get("no_band_names"):
                 op_name += " " + "_".join(instruction["bands"])
-            print("generating " + op_name)
             op_images = [
                 self.get_band(band).copy() for band in instruction["bands"]
             ]
@@ -299,29 +305,21 @@ class BandSet:
             pipeline = Look.compile_from_instruction(
                 instruction, metadata=self.metadata
             )
-            # get per-band nominal wavelength values (actually relevant only
-            # to spectops at present)
-            # wavelengths = self.wavelength(instruction["bands"])
             # all of cropper, pre, post, overlay can potentially be absent --
-            # these are _possible_ steps in the pipeline.
+            # these are _possible_ steps in the pipeline. note that wavelengths
+            # for spectops are added automagically by the Look compiler.
             if pool is not None:
                 look_cache[op_name] = pool.apipe(
-                    pipeline.execute,
-                    op_images,
-                    # wavelengths=wavelengths,
-                    base_image=base_image,
+                    pipeline.execute, op_images, base_image=base_image
                 )
             else:
                 look_cache[op_name] = pipeline.execute(
                     op_images, base_image=base_image
                 )
+                log.info("generated " + op_name)
         if pool is not None:
-            pool.close()
-            pool.join()
-            look_cache = {
-                look_name: look_result.get()
-                for look_name, look_result in look_cache.items()
-            }
+            look_cache = wait_for_it(pool, look_cache, log,
+                                     message="generated ", as_dict=True)
         self.looks |= look_cache
 
     def purge(self, what: Optional[str] = None) -> None:
@@ -340,19 +338,18 @@ class ImageBands(BandSet):
     """
     simple case of a bandset produced from a single multichannel image.
     """
+
     def __init__(self, path, load_method=None, **bandset_kwargs):
         if load_method is None:
             from marslab.imgops.loaders import pil_load
+
             load_method = pil_load
         metadata = pd.DataFrame()
-        metadata['PATH'] = path
+        metadata["PATH"] = path
         super().__init__(
-            metadata=metadata,
-            load_method=load_method,
-            **bandset_kwargs
+            metadata=metadata, load_method=load_method, **bandset_kwargs
         )
         # TODO: stuff about automatically coercing grayscale if desired
         self.raw = load_method(path)
-        metadata['BAND'] = self.raw.keys()
-        metadata['IX'] = self.raw.keys()
-
+        metadata["BAND"] = self.raw.keys()
+        metadata["IX"] = self.raw.keys()
