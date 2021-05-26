@@ -60,10 +60,10 @@ class Pipeline:
     inserts: dict of index: args/kwargs to be added to function at that step
     in pipeline, or just sequence of None / args/kwargs; can also give
     index:None to defer argument pass to runtime; currently only
-    one insert per step is supported 
+    one insert per step is supported
     sends: dict of index: function to call
     with the state at that step in pipeline, or just sequence of None /
-    function currently only one send per step is supported 
+    function currently only one send per step is supported
     loops: dict of (index, index): function to call with the state at that step in pipeline,
     step in pipeline to return evaluation result; not currently supported
     parameters: dict of (index or function name, args/kwargs to
@@ -331,6 +331,26 @@ class Pipeline:
     def _bind_special_runtime_kwargs(self, runtime_insert_kwargs):
         pass
 
+    def __str__(self):
+        me_string = ""
+        for attribute in (
+            "steps",
+            "parameters",
+            "sends",
+            "inserts",
+            "captures",
+        ):
+            if not getattr(self, attribute):
+                continue
+            me_string += (
+                attribute + ":\n" + getattr(self, attribute).__repr__() + "\n"
+            )
+        if not me_string:
+            return "empty Pipeline"
+        return me_string
+
+    def __repr__(self):
+        return self.__str__()
 
 # class IterPipeline:
 #     def __init__(
@@ -346,4 +366,3 @@ class Pipeline:
 #         self.runtime_insert_chain = chain(rt_insert_args, repeat(None))
 #         self.rt_insert_kwargs = rt_insert_kwargs
 #       ...
-

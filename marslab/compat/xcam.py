@@ -326,7 +326,7 @@ def piecewise_interpolate_focal_length(zmc):
         )
 
 
-NARROWBAND_TO_BAYER = {
+BAND_TO_BAYER = {
     "ZCAM": {
         "L1": "red",
         "L2": "red",
@@ -381,7 +381,7 @@ def count_rois_on_xcam_images(
     right_hdu_arrays = [hdu.data for hdu in right_hdus]
     right_hdu_names = [hdu.header["NAME"] for hdu in right_hdus]
     if bayer_pixel_dict is None:
-        bayer_pixel_dict = NARROWBAND_TO_BAYER[instrument]
+        bayer_pixel_dict = BAND_TO_BAYER[instrument]
     if not all([pixel is None for pixel in bayer_pixel_dict.values()]):
         bayer_masks = make_bayer(
             list(xcam_image_dict.values())[0].shape, RGGB_PATTERN
@@ -402,12 +402,18 @@ def count_rois_on_xcam_images(
                 detector_mask[bayer_coords] = True
         else:
             detector_mask = np.full(image.shape, True)
-        # TODO: pixel maps can be added here, this is a sketch --
-        #  maybe will need more complicated logic for individual filters / eyes
-        if pixel_map_dict is not None:
-            if filter_name in pixel_map_dict.keys():
+        # forbidding saturated and otherwise bad pixels
+        if pixel_map_dict:
+            if filter_name[1] == '0':
+                base_pixel_map = pixel_map_dict.get(filter_name[0:2])
+            else:
+                base_pixel_map = pixel_map_dict.get(filter_name)
+            if base_pixel_map is not None:
+                # masking bad, no-signal, and saturated pixels
+                flag_mask = np.full(image.shape, True)
+                flag_mask[np.where(np.isin(base_pixel_map, [1, 2, 4]))] = False
                 detector_mask = np.logical_and(
-                    detector_mask, pixel_map_dict[filter_name]
+                    detector_mask, flag_mask
                 )
         if filter_name.upper().startswith("L"):
             roi_arrays = left_hdu_arrays

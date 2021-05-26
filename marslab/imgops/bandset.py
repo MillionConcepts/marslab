@@ -11,7 +11,7 @@ from typing import Optional, Union
 # performs pickling magick at import.
 from cytoolz.dicttoolz import merge, valfilter
 import dill
-from pathos.multiprocessing import ProcessingPool
+from pathos.multiprocessing import ProcessPool
 import numpy as np
 import pandas as pd
 
@@ -19,11 +19,7 @@ import pandas as pd
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import get_from_all, absolutely_destroy
 from marslab.imgops.look import Look
-from marslab.imgops.poolutils import (
-    simple_log_callback,
-    watch_pool,
-    wait_for_it,
-)
+from marslab.imgops.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
 
@@ -108,7 +104,7 @@ class BandSet:
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
             log.info('... initializing worker pool ...')
-            pool = ProcessingPool(self.threads.get(thread_type))
+            pool = ProcessPool(self.threads.get(thread_type))
             pool.restart()
             return pool
 
@@ -219,6 +215,8 @@ class BandSet:
         don't set None for non-debayered images: debayer availability
         should be visible by looking at bandset.debayered's keys
         """
+        if bands == 'all':
+            bands = self.metadata['BAND'].unique()
         for band in bands:
             debayer = self.debayer_if_required(band)
             if debayer is not None:
@@ -272,10 +270,15 @@ class BandSet:
                 set(self.raw.keys()).intersection(desired_bands),
             )
         # what looks can we make with what we have?
-        return valfilter(
+        available_looks = valfilter(
             lambda value: set(value["bands"]).issubset(tuple(self.raw.keys())),
             instructions,
         )
+        for op_name in [
+            op for op in instructions.keys() if op not in available_looks
+        ]:
+            log.info("skipping " + op_name + " due to missing bands")
+        return available_looks
 
     def make_look_set(
         self,

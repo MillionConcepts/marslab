@@ -1,21 +1,25 @@
 """
 utility functions for dealing with matplotlib
 """
-
 import io
 
+from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import PIL.Image
 
 
 def get_mpl_image(fig):
     """
-    tries to get the first axis from a mpl figure.
+    tries to get the last axis from a mpl figure.
     cranky and fault-intolerant
     """
+    # todo: this does not work for the general case
     ax = fig.axes[0]
     buffer = io.BytesIO()
+    # despine(ax)
+    # remove_ticks(ax)
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    fig.savefig(buffer, bbox_inches=extent)
+    fig.savefig(buffer, bbox_inches=extent, pad_inches=0)
     return PIL.Image.open(buffer)
 
 
@@ -46,3 +50,16 @@ def set_label(
     else:
         raise ValueError('x_or_y should be "x" or "y"')
     return method(text, loc=loc, fontproperties=fontproperties)
+
+
+def attach_axis(ax = None, where="right", size="50%", pad=0.1):
+    if ax is None:
+        ax = plt.gca()
+    divider = make_axes_locatable(ax)
+    return divider.append_axes(where, size=size, pad=pad)
+
+
+def despine(ax,edges=['top','bottom','left','right']):
+    # Remove the bounding box for a given subplot object axes
+    for p in edges:
+        ax.spines[p].set_visible(False)

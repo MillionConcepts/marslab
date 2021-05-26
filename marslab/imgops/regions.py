@@ -3,6 +3,8 @@ import numpy as np
 from astropy.io import fits
 from scipy.ndimage import sobel, distance_transform_edt
 
+from marslab.imgops.pltutils import despine, remove_ticks
+
 
 def furthest_from_edge(image):
     distances = distance_transform_edt(image)
@@ -37,7 +39,7 @@ def draw_edgemaps_on_image(
 ):
     fig = plt.figure()
     ax = fig.add_subplot()
-    ax.imshow(image)
+    ax.imshow(image, interpolation=None)
     for roi_name, edgemap in edgemap_dict.items():
         if "color" in edgemap.keys():
             color = edgemap["color"]
@@ -55,8 +57,8 @@ def draw_edgemaps_on_image(
                 fontproperties=fontproperties,
                 alpha=0.8,
             )
-    ax.set_xticks([])
-    ax.set_yticks([])
+    remove_ticks(ax)
+    despine(ax)
     return fig
 
 
