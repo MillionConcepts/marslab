@@ -9,7 +9,7 @@ from typing import Optional, Union
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
-from cytoolz.dicttoolz import merge, valfilter
+from cytoolz.dicttoolz import merge
 import dill
 from pathos.multiprocessing import ProcessPool
 import numpy as np
@@ -251,7 +251,7 @@ class BandSet:
             return self.debayered[band]
         return self.raw[band]
 
-    def prep_look_set(self, instructions: Sequence[Mapping], autoload: bool):
+    def prep_look_set(self, instructions: Collection[Mapping], autoload: bool):
         """
         filter the instruction set we want for the images we have.
         if requested, also load/cache images, debayering as required.
@@ -281,7 +281,7 @@ class BandSet:
 
     def make_look_set(
         self,
-        instructions: Mapping[str, Mapping],
+        instructions: Collection[Mapping],
         autoload: bool = True,
     ):
         # load images and filter instruction set for unavailable bands
