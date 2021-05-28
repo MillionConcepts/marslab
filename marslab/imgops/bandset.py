@@ -3,7 +3,7 @@ defines a class for organizing and performing bulk rendering operations on
 multispectral image products
 """
 import logging
-from collections.abc import Mapping, Collection, Sequence
+from collections.abc import Mapping, Callable, Collection, Sequence
 from itertools import chain
 from typing import Optional, Union
 
@@ -17,7 +17,7 @@ import pandas as pd
 
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import get_from_all, absolutely_destroy
+from marslab.imgops.imgutils import get_from_all, absolutely_destroy, mapfilter
 from marslab.imgops.look import Look
 from marslab.imgops.poolutils import wait_for_it
 
@@ -33,13 +33,13 @@ class BandSet:
     # TODO: do I need to allow more of these on init? like for copying? maybe?
     def __init__(
         self,
-        metadata=None,
-        rois=None,
-        bayer_info=None,
-        load_method=None,
-        name=None,
-        threads=None,
-        raw=None,
+        metadata: pd.DataFrame = None,
+        rois: Mapping = None,
+        bayer_info: Mapping = None,
+        load_method: Callable = None,
+        name: str = None,
+        threads: Mapping = None,
+        raw: Mapping = None,
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -103,7 +103,7 @@ class BandSet:
 
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
-            log.info('... initializing worker pool ...')
+            log.info("... initializing worker pool ...")
             pool = ProcessPool(self.threads.get(thread_type))
             pool.restart()
             return pool
@@ -215,8 +215,8 @@ class BandSet:
         don't set None for non-debayered images: debayer availability
         should be visible by looking at bandset.debayered's keys
         """
-        if bands == 'all':
-            bands = self.metadata['BAND'].unique()
+        if bands == "all":
+            bands = self.metadata["BAND"].unique()
         for band in bands:
             debayer = self.debayer_if_required(band)
             if debayer is not None:
@@ -251,9 +251,7 @@ class BandSet:
             return self.debayered[band]
         return self.raw[band]
 
-    def prep_look_set(
-        self, instructions: Mapping[str, Mapping], autoload: bool
-    ):
+    def prep_look_set(self, instructions: Sequence[Mapping], autoload: bool):
         """
         filter the instruction set we want for the images we have.
         if requested, also load/cache images, debayering as required.
@@ -270,14 +268,15 @@ class BandSet:
                 set(self.raw.keys()).intersection(desired_bands),
             )
         # what looks can we make with what we have?
-        available_looks = valfilter(
-            lambda value: set(value["bands"]).issubset(tuple(self.raw.keys())),
+        available_looks = mapfilter(
+            lambda bands: set(bands).issubset(tuple(self.raw.keys())),
+            "bands",
             instructions,
         )
-        for op_name in [
-            op for op in instructions.keys() if op not in available_looks
-        ]:
-            log.info("skipping " + op_name + " due to missing bands")
+        for op in [op for op in instructions if op not in available_looks]:
+            log.info(
+                "skipping " + str(op.get("name")) + " due to missing bands"
+            )
         return available_looks
 
     def make_look_set(
@@ -292,13 +291,13 @@ class BandSet:
         pool = self.setup_pool("look")
         if pool is not None:
             log.info("... serializing arrays ...")
-        for instruction in available_instructions.values():
+        for instruction in available_instructions:
             # do we have a special name? TODO: make this more opinionated?
             op_name = instruction.get("name")
             if op_name is None:
-                op_name = instruction["look"]
-            if not instruction.get("no_band_names"):
-                op_name += " " + "_".join(instruction["bands"])
+                op_name = (
+                    instruction["look"] + "_" + "_".join(instruction["bands"])
+                )
             op_images = [
                 self.get_band(band).copy() for band in instruction["bands"]
             ]
@@ -324,8 +323,9 @@ class BandSet:
                 )
                 log.info("generated " + op_name)
         if pool is not None:
-            look_cache = wait_for_it(pool, look_cache, log,
-                                     message="generated ", as_dict=True)
+            look_cache = wait_for_it(
+                pool, look_cache, log, message="generated ", as_dict=True
+            )
         self.looks |= look_cache
 
     def purge(self, what: Optional[str] = None) -> None:

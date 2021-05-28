@@ -3,7 +3,7 @@ import numpy as np
 from astropy.io import fits
 from scipy.ndimage import sobel, distance_transform_edt
 
-from marslab.imgops.pltutils import despine, remove_ticks
+from marslab.imgops.pltutils import strip_axes
 
 
 def furthest_from_edge(image):
@@ -18,6 +18,7 @@ def roi_values(array):
         "min": array.min(),
         "max": array.max(),
         "total": array.sum(),
+        "count": array.size
     }
 
 
@@ -57,8 +58,7 @@ def draw_edgemaps_on_image(
                 fontproperties=fontproperties,
                 alpha=0.8,
             )
-    remove_ticks(ax)
-    despine(ax)
+    strip_axes(ax)
     return fig
 
 
@@ -82,6 +82,7 @@ def count_rois_on_image(
         special_mask = np.full(image.shape, True)
         special_mask[np.isin(image, special_constants)] = False
     for roi_mask, roi_name in zip(roi_arrays, roi_names):
+        roi_mask = roi_mask.astype(bool)
         assert (
             roi_mask.shape == image.shape
         ), "it seems like this ROI might have been drawn on a different image."

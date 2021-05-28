@@ -1,6 +1,7 @@
 """
 functions for handling the MERtools .sel format
 """
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Union
 
@@ -113,8 +114,8 @@ def sel_to_roi(sel_fn: Union[str, Path], instrument: str) -> fits.HDUList:
     return roi_fits
 
 
-def add_merspect_colors_to_edgemaps(edgemap_dict):
-    for roi_color_eye, edge in edgemap_dict.items():
+def add_merspect_colors_to_edgemaps(edgemap_dict: Mapping):
+    for roi_color_eye, _ in edgemap_dict.items():
         color = roi_color_eye.replace(" right", "").replace(" left", "")
         edgemap_dict[roi_color_eye]["color"] = MERSPECT_COLOR_MAPPINGS[color]
     return edgemap_dict

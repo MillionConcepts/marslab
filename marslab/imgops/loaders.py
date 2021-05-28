@@ -8,6 +8,7 @@ from typing import Optional, TYPE_CHECKING, Union
 import numpy as np
 
 if TYPE_CHECKING:
+    import PIL.Image
     import rasterio
     import pdr
     import pandas as pd
@@ -189,7 +190,7 @@ def pdr_load(
 
 
 def pil_load_shell(
-    image,
+    image: "PIL.Image",
     metadata: Optional["pd.DataFrame"] = None,
     bands: Optional[Sequence[Union[str, int]]] = None,
 ):
@@ -209,13 +210,13 @@ def pil_load_shell(
     return band_arrays
 
 
-
 def pil_load(
     path: str,
     metadata: Optional["pd.DataFrame"] = None,
     bands: Optional[Sequence[Union[str, int]]] = None,
 ):
     from PIL import Image
+
     image = Image.open(path)
     return pil_load_shell(image, metadata, bands)
 
@@ -227,6 +228,7 @@ def pil_load_rgb(
     bands: Optional[Sequence[Union[str, int]]] = None,
 ):
     from PIL import Image
+
     image = Image.open(path)
-    image.convert('RGB')
+    image.convert("RGB")
     return pil_load_shell(image, metadata, bands)

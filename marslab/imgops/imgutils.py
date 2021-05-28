@@ -42,11 +42,9 @@ def absolutely_destroy(thing):
     gc.collect()
 
 
-def eightbit(array, stretch=(0,0)):
+def eightbit(array, stretch=(0, 0)):
     """return an eight-bit version of an array"""
-    return np.round(
-        normalize_range(array, (0, 255), stretch)
-    ).astype(np.uint8)
+    return np.round(normalize_range(array, (0, 255), stretch)).astype(np.uint8)
 
 
 def crop(array: np.ndarray, bounds=None, **_) -> np.ndarray:
@@ -78,7 +76,7 @@ def crop_all(
 
 def split_filter(
     filter_function: Callable, axis: int = -1
-) -> Callable[[np.ndarray, Any], np.ndarray]:
+) -> Callable[Any, np.ndarray]:
     """
     produce a 'split' version of a filter that applies itself to slices across
     a particular axis -- e.g., take a gaussian blur function, return a function
@@ -106,13 +104,15 @@ def map_filter(filter_function: Callable) -> Callable:
     return mapped_filter
 
 
+# noinspection PyArgumentList
 def normalize_range(
-    image,
-    bounds=(0, 1),
-    stretch=None,
-):
+    image: np.ndarray,
+    bounds: Sequence[int] = (0, 1),
+    stretch: Union[float, Sequence[float]] = None,
+) -> np.ndarray:
     """
     simple linear min-max scaler that optionally cuts off low and high
+
     percentiles of the input
     """
     working_image = image.copy()
@@ -258,3 +258,11 @@ def apply_image_filter(image, image_filter=None):
     if image_filter is None:
         return image
     return image_filter["function"](image, **image_filter.get("params", {}))
+
+
+def mapfilter(predicate, key, map_sequence):
+    new_sequence = []
+    for mapping in map_sequence:
+        if predicate(mapping.get(key)):
+            new_sequence.append(mapping)
+    return new_sequence

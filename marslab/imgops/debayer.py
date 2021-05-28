@@ -50,8 +50,8 @@ def make_pattern_masks(
 
 
 def make_bayer(
-    array_shape: tuple[int, int],
-    bayer_pattern: Mapping[str, tuple[int]],
+    array_shape: Sequence[int, int],
+    bayer_pattern: Mapping[str, Sequence[int]],
 ) -> dict[str, tuple]:
     """
     alias to make_pattern_masks
@@ -109,7 +109,6 @@ def mask_bayer_pixels(
     pixel: Union[str, Sequence[str]],
     pattern: Mapping[str, tuple] = None,
     masks: Mapping[str, tuple] = None,
-    row_column: Mapping[str, tuple] = None,
     default = 0,
     **_kwargs  # TODO: hacky!
 ) -> np.ndarray:

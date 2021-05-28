@@ -1,8 +1,8 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from functools import wraps, partial
 from itertools import repeat, chain
 from operator import attrgetter
-from typing import Any
+from typing import Any, Optional
 
 from cytoolz import identity, compose
 
@@ -12,7 +12,7 @@ def zero(*_, **__):
     return
 
 
-def triggerize(niladic_function):
+def triggerize(niladic_function: Callable) -> Callable:
     """
     implicitly turns a function into a trigger step for
     a pipeline
@@ -26,7 +26,7 @@ def triggerize(niladic_function):
     return trigger
 
 
-def reindex_mapping(mapping):
+def reindex_mapping(mapping: Mapping) -> Mapping[int, Any]:
     assert isinstance(mapping, Mapping), "reindex_mapping only takes Mappings"
     return {
         ix: value for ix, value in zip(range(len(mapping)), mapping.values())
@@ -41,7 +41,9 @@ def enumerate_as_mapping(sequence):
     return {ix: element for ix, element in enumerate(sequence)}
 
 
-def insert_after(new_key, new_value, prior_key, mapping):
+def insert_after(
+    new_key: Any, new_value: Any, prior_key: Any, mapping: Mapping
+) -> Mapping:
     new_dict = {}
     for key, value in mapping.items():
         new_dict[key] = value
@@ -64,19 +66,20 @@ class Pipeline:
     sends: dict of index: function to call
     with the state at that step in pipeline, or just sequence of None /
     function currently only one send per step is supported
-    loops: dict of (index, index): function to call with the state at that step in pipeline,
-    step in pipeline to return evaluation result; not currently supported
+    loops: **not yet supported** dict of (index, index): function to
+        call with the state at that step in pipeline, step in pipeline to
+        return evaluation result
     parameters: dict of (index or function name, args/kwargs to
     bind to pipeline
     """
 
     def __init__(
         self,
-        steps=None,
-        parameters=None,
-        sends=None,
-        inserts=None,
-        captures=None,
+        steps: Optional[Sequence[Callable]] = None,
+        parameters: Optional[Mapping] = None,
+        sends: Optional[Mapping[Any, Callable]] = None,
+        inserts: Optional[Mapping] = None,
+        captures: Optional[Mapping] = None,
     ):
         if steps is None:
             steps = [identity]
@@ -95,16 +98,17 @@ class Pipeline:
         # todo: hard?
         raise NotImplementedError
 
-    def check_for_step(self, step_name):
-        assert step_name in self.steps.keys(), (
-            step_name + " is not an element of the pipeline."
-        )
+    def _check_for_step(self, step_name: Hashable) -> Any:
+        if step_name not in self.steps.keys():
+            raise KeyError(
+                str(step_name) + " is not an element of the pipeline."
+            )
         return self.steps[step_name]
 
     def bind_kwargs(self, step_name, rebind=False, **kwargs):
         if kwargs == {}:
             return
-        step = self.check_for_step(step_name)
+        step = self._check_for_step(step_name)
         if (rebind is True) and ("func" in dir(step)):
             step = step.func
         if (rebind is True) or (
@@ -351,6 +355,7 @@ class Pipeline:
 
     def __repr__(self):
         return self.__str__()
+
 
 # class IterPipeline:
 #     def __init__(
