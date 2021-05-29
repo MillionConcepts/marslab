@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 from scipy.ndimage import sobel, distance_transform_edt
+from scipy.stats import skew, kurtosis, mode
 
 from marslab.imgops.pltutils import strip_axes
 
@@ -11,15 +12,24 @@ def furthest_from_edge(image):
     return np.unravel_index(distances.argmax(), distances.shape)
 
 
-def roi_values(array):
-    return {
+def roi_stats(array, extended=True):
+    base = {
         "mean": array.mean(),
         "err": array.std(),
-        "min": array.min(),
-        "max": array.max(),
-        "total": array.sum(),
-        "count": array.size
+        "values": array.ravel()
     }
+    if extended:
+        base |= {
+            "min": array.min(),
+            "max": array.max(),
+            "total": array.sum(),
+            "count": array.size,
+            "skew": skew(array),
+            "kurtosis": kurtosis(array),
+            "mode": mode(array),
+            "median": np.median(array)
+        }
+    return base
 
 
 def make_roi_edgemaps(roi_fits, calculate_centers=True):
@@ -90,7 +100,7 @@ def count_rois_on_image(
             roi_mask = np.logical_and(roi_mask, detector_mask)
         if special_constants is not None:
             roi_mask = np.logical_and(roi_mask, detector_mask)
-        count_dict[roi_name] = roi_values(image[roi_mask])
+        count_dict[roi_name] = roi_stats(image[roi_mask])
     return count_dict
 
 
