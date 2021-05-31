@@ -52,7 +52,7 @@ def insert_after(
     return new_dict
 
 
-class Pipeline:
+class Composition:
     """
     class defining a composition of steps, optionally with
     additional input, output, and i/o points ("inserts," "sends," "captures,"
@@ -350,7 +350,7 @@ class Pipeline:
                 attribute + ":\n" + getattr(self, attribute).__repr__() + "\n"
             )
         if not me_string:
-            return "empty Pipeline"
+            return "empty Composition"
         return me_string
 
     def __repr__(self):
@@ -360,7 +360,7 @@ class Pipeline:
 # class IterPipeline:
 #     def __init__(
 #         self,
-#         pipeline: Pipeline,
+#         pipeline: Composition,
 #         signal: Any = None,
 #         *rt_insert_args,
 #         rt_insert_kwargs: Mapping[Any],

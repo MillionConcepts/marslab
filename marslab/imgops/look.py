@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import TYPE_CHECKING, Optional
 
-from marslab.pipeline import Pipeline
+from marslab.composition import Composition
 import marslab.spectops
 from marslab.imgops.imgutils import map_filter, crop_all
 from marslab.imgops.render import (
@@ -75,7 +75,7 @@ def interpret_instruction_step(
 ) -> tuple[Optional[Callable], Mapping]:
     """
     unpack individual elements of the look instruction markup
-    syntax into steps and kwargs for a Pipeline.
+    syntax into steps and kwargs for a Composition.
     """
     # check central mandatory element first
     if step_name == "look":
@@ -96,7 +96,7 @@ def interpret_instruction_step(
     return chunk["function"], chunk.get("params", {})
 
 
-class Look(Pipeline, ABC):
+class Look(Composition, ABC):
     def __init__(
         self,
         *args,
