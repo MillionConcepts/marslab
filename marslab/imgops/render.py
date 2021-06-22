@@ -244,23 +244,29 @@ def make_thumbnail(
 
 
 def colormapped_plot(
-    array,
+    array: np.ndarray,
     *,
     cmap=None,
     render_colorbar=False,
     no_ticks=True,
     colorbar_fp=None,
+    special_constants = None
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of a pipeline it
     #   shouldn't be, remove this or something
     if isinstance(array, mpl.figure.Figure):
         return array
-    norm = plt.Normalize(vmin=array.min(), vmax=array.max())
+    if special_constants is not None:
+        not_special = array[~np.isin(array, special_constants)]
+    else:
+        not_special = array
+    norm = plt.Normalize(vmin=not_special.min(), vmax=not_special.max())
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)
     if cmap is None:
         cmap = cm.get_cmap("Greys_r")
+    array[np.isin(array, special_constants)] = np.nan
     array = cmap(norm(array))
     fig = plt.figure()
     ax = fig.add_subplot()
