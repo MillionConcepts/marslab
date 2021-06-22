@@ -351,6 +351,7 @@ BAND_TO_BAYER = {
 }
 
 
+# TODO: way too huge and messy.
 def count_rois_on_xcam_images(
     roi_hdulist,
     xcam_image_dict,
@@ -366,7 +367,6 @@ def count_rois_on_xcam_images(
     control flow that we've chosen to structure it differently from the
     quick imaging functions. perhaps this is wrong, though.
 
-    TODO: way too huge and messy.
     """
     from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
     from marslab.imgops.regions import count_rois_on_image, roi_stats
@@ -392,8 +392,9 @@ def count_rois_on_xcam_images(
         )
     else:
         bayer_masks = None
-    for filter_name, image in xcam_image_dict.items():
-        if filter_name.endswith("0"):
+    for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
+        image = xcam_image_dict.get(filter_name)
+        if image is None:
             continue
         # bayer-counting logic
         if bayer_pixel_dict[filter_name] is not None:
@@ -473,13 +474,16 @@ def count_rois_on_xcam_images(
                 }
             )
     # note pivoting automatically destroys any columns with arraylikes
-    return (
-        pd.concat(
+    base_df = pd.concat(
             [
                 pd.DataFrame(cubestats, dtype=np.float32),
                 pd.DataFrame(roi_listing, dtype=np.float32),
             ]
-        )
-        .pivot_table(columns=["COLOR"])
-        .T.reset_index()
-    )
+        ).pivot_table(columns=["COLOR"]).T.reset_index()
+    # enter nan columns for err and mean only -- this is a format
+    # standardization choice
+    for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
+        if filter_name not in base_df.columns:
+            base_df[filter_name] = np.nan
+            base_df[filter_name + "_ERR"] = np.nan
+    return base_df
