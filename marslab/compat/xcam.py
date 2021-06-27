@@ -106,13 +106,11 @@ def make_xcam_filter_pairs(abbreviation):
     form list of pairs of close filters for mastcam-family instruments
     """
     filter_dict = make_xcam_filter_dict(abbreviation)
-    return tuple(
-        [
-            (filter_1, filter_2)
-            for filter_1, filter_2 in combinations(filter_dict, 2)
-            if abs(filter_dict[filter_1] - filter_dict[filter_2]) <= 5
-        ]
-    )
+    pairs = []
+    for filter_1, filter_2 in combinations(filter_dict, 2):
+        if abs(filter_dict[filter_1] - filter_dict[filter_2]) <= 5:
+            pairs.append(tuple(sorted([filter_1, filter_2])))
+    return tuple(pairs)
 
 
 def make_virtual_filters(abbreviation):
@@ -295,8 +293,7 @@ INSTRUMENT_UNCERTAINTIES = {
     },
 }
 
-# technically there is an equation for this but I think it is smarter to use
-# a lookup table -- see M20 Camera SIS
+# see M20 Camera SIS
 ZCAM_ZOOM_MOTOR_COUNT_TO_FOCAL_LENGTH = {
     0: 26,
     2448: 34,

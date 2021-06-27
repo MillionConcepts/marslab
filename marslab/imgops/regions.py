@@ -13,11 +13,7 @@ def furthest_from_edge(image):
 
 
 def roi_stats(array, extended=True):
-    base = {
-        "mean": array.mean(),
-        "err": array.std(),
-        "values": array.ravel()
-    }
+    base = {"mean": array.mean(), "err": array.std(), "values": array.ravel()}
     if extended:
         base |= {
             "min": array.min(),
@@ -27,7 +23,7 @@ def roi_stats(array, extended=True):
             "skew": skew(array),
             "kurtosis": kurtosis(array),
             "mode": mode(array),
-            "median": np.median(array)
+            "median": np.median(array),
         }
     return base
 
@@ -100,6 +96,10 @@ def count_rois_on_image(
             roi_mask = np.logical_and(roi_mask, detector_mask)
         if special_constants is not None:
             roi_mask = np.logical_and(roi_mask, detector_mask)
+        # generally cases like: this ROI is drawn entirely within the missing
+        # area of a partial
+        if np.all(~roi_mask):
+            continue
         count_dict[roi_name] = roi_stats(image[roi_mask])
     return count_dict
 

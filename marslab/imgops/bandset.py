@@ -348,7 +348,6 @@ class ImageBands(BandSet):
     def __init__(self, path, load_method=None, **bandset_kwargs):
         if load_method is None:
             from marslab.imgops.loaders import pil_load
-
             load_method = pil_load
         metadata = pd.DataFrame()
         metadata["PATH"] = path

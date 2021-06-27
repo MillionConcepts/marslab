@@ -3,12 +3,9 @@ inline rendering functions for look pipelines. can also be called on their own.
 """
 
 import io
-from collections.abc import (
-    Sequence,
-)
 from functools import reduce
 from itertools import repeat
-from typing import Union
+from typing import Union, Optional, Sequence, Collection
 
 import matplotlib as mpl
 import matplotlib.cm as cm
@@ -26,18 +23,23 @@ from marslab.imgops.imgutils import (
 )
 from marslab.imgops.pltutils import (
     set_colorbar_font,
-    get_mpl_image, attach_axis, strip_axes,
+    get_mpl_image,
+    attach_axis,
+    strip_axes,
 )
 
 
 def decorrelation_stretch(
-    channels: Sequence[ArrayLike],
-    *,
-    contrast_stretch=None,
-    special_constants=None,
-    sigma=None,
+    channels: Sequence[np.ndarray],
+    contrast_stretch: Optional[Union[Sequence[float], float]] = None,
+    special_constants: Optional[Collection[float]] = None,
+    sigma: Optional[float] = None,
 ):
     """
+    channels: must be at least two ndarrays, numeric dtypes. each ndarray
+    should be 2D (size > 1).. no nans.
+    contrast_stretch: float or
+
     decorrelation stretch of passed array on last axis of array. see
     Gillespie et al. 1986, etc., etc.
 
@@ -134,7 +136,7 @@ def render_overlay(
     colorbar = plt.colorbar(
         cm.ScalarMappable(norm=norm, cmap=overlay_cmap),
         alpha=overlay_opacity,
-        cax=cax
+        cax=cax,
     )
     if mpl_settings.get("colorbar_fp"):
         set_colorbar_font(colorbar, mpl_settings["colorbar_fp"])
@@ -250,7 +252,7 @@ def colormapped_plot(
     render_colorbar=False,
     no_ticks=True,
     colorbar_fp=None,
-    special_constants = None
+    special_constants=None,
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of a pipeline it
@@ -274,7 +276,8 @@ def colormapped_plot(
     if render_colorbar:
         cax = attach_axis(ax, size="3%", pad="0.5%")
         colorbar = plt.colorbar(
-            cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax,
+            cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=cax,
         )
         if colorbar_fp:
             set_colorbar_font(colorbar, colorbar_fp)
