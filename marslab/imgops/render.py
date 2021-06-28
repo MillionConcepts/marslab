@@ -39,16 +39,23 @@ def decorrelation_stretch(
     sigma: Optional[float] = None,
 ):
     """
-    channels: must be at least two ndarrays, numeric dtypes. each ndarray
-    should be 2D (size > 1).. no nans.
-    contrast_stretch: float or
-
     decorrelation stretch of passed array on last axis of array. see
     Gillespie et al. 1986, etc., etc.
 
     This is partly an adaptation of the MATLAB DCS implementation.
     Work towards this adaptation is partly due to Lukáš Brabec
     (github.com/lbrabec/decorrstretch) and Christian Tate (unreleased).
+
+    channels: must be at least two ndarrays, numeric dtypes. each ndarray
+    should be 2D (size > 1). no nans. integer arrays will be cast to float32.
+    float arrays of depth < 32 will be cast to float32.
+    contrast_stretch: float or sequence of two floats. each must be
+    between 0 and 100 inclusive. percentile ranges to use as max/min bounds
+    of output array.
+    sigma: fixed target standard deviation for each channel. must be >= 0;
+    ranges between 0 and 1 recommended. None means that the original standard
+    deviation per channel is used as the target (this is a 'classic'
+    decorrelation stretch)
     """
     working_array = np.dstack(channels)
     # TODO: this is not a good general case solution, might need to use masked
@@ -59,7 +66,7 @@ def decorrelation_stretch(
         )
     input_shape = working_array.shape
     channel_vectors = working_array.reshape(-1, input_shape[-1])
-    if channel_vectors.dtype.char in np.typecodes["AllInteger"]:
+    if channel_vectors.dtype not in [np.float32, np.float64]:
         working_dtype = np.float32
     else:
         working_dtype = channel_vectors.dtype

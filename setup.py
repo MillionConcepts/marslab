@@ -31,6 +31,8 @@ setup(
         "pathos",
         "cytoolz",
         "rasterio",
-        "pathos"
+        "pathos",
+        "hypothesis",
+        "pytest"
     ],
 )

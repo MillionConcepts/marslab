@@ -1,7 +1,7 @@
 from collections import ChainMap
 
 import numpy as np
-from hypothesis import given, strategies as st, reject, assume
+from hypothesis import given, strategies as st, reject, assume, settings as hset
 from hypothesis.errors import UnsatisfiedAssumption
 from hypothesis.extra.numpy import (
     arrays,
@@ -13,6 +13,7 @@ from hypothesis.extra.numpy import (
 from more_itertools import all_equal
 
 from marslab.imgops.render import decorrelation_stretch, eightbit
+from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
 
 rng = np.random.default_rng()
 
@@ -50,6 +51,7 @@ rng = np.random.default_rng()
 #     assert np.std(np.dstack(channels)) < np.std(eightbit(stretched))
 #
 
+@hset(max_examples = 500)
 @given(
     channels=st.lists(
         arrays(
@@ -58,20 +60,28 @@ rng = np.random.default_rng()
         ),
         min_size=2,
     ),
-    contrast_stretch=st.one_of(st.none(), st.floats(), st.lists(st.floats())),
+    contrast_stretch=st.one_of(
+        st.none(),
+        st.floats(min_value=0, max_value=100),
+        st.lists(
+            st.floats(min_value=0, max_value=100),
+            max_size=2,
+            min_size=2
+        ),
+    ),
     special_constants=st.one_of(
         st.none(),
-        st.lists(st.floats()),
-        st.sets(st.floats()),
+        st.lists(finite_floats),
+        st.sets(finite_floats),
         st.frozensets(st.floats()),
-        st.dictionaries(keys=st.floats(), values=st.floats()),
-        st.dictionaries(keys=st.floats(), values=st.none()).map(dict.keys),
-        st.dictionaries(keys=st.integers(), values=st.floats()).map(
+        st.dictionaries(keys=finite_floats, values=finite_floats),
+        st.dictionaries(keys=finite_floats, values=st.none()).map(dict.keys),
+        st.dictionaries(keys=st.integers(), values=finite_floats).map(
             dict.values
         ),
-        st.dictionaries(keys=st.floats(), values=st.floats()).map(ChainMap),
+        st.dictionaries(keys=finite_floats, values=finite_floats).map(ChainMap),
     ),
-    sigma=st.one_of(st.none(), st.floats()),
+    sigma=st.one_of(st.none(), positive_finite_floats),
 )
 def test_fuzz_decorrelation_stretch(
     channels, contrast_stretch, special_constants, sigma
@@ -90,7 +100,4 @@ def test_fuzz_decorrelation_stretch(
     # unsatisfied assumption
     except UnsatisfiedAssumption:
         return
-
-
-
 
