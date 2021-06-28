@@ -15,6 +15,7 @@ import sys
 from typing import Union, Any
 
 import numpy as np
+from numpy.ma import MaskedArray
 
 
 def get_from_all(key, mappings, default=None):
@@ -266,3 +267,20 @@ def mapfilter(predicate, key, map_sequence):
         if predicate(mapping.get(key)):
             new_sequence.append(mapping)
     return new_sequence
+
+
+def mask_below(array, value):
+    return MaskedArray(array, array <= value)
+
+
+def make_mask_passer(func, mask_nans = True):
+    def mask_passer(array, *args, **kwargs):
+        transformed = func(array, *args, **kwargs)
+        if isinstance(array, np.ma.masked_array):
+            mask = array.mask
+            if mask_nans:
+                mask[np.isnan(transformed)] = True
+            return np.ma.MaskedArray(transformed, mask)
+        return transformed
+
+    return mask_passer

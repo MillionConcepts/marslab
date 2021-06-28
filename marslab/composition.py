@@ -294,6 +294,9 @@ class Composition:
         runtime_insert_chain = chain(rt_insert_args, repeat(None))
         return runtime_insert_chain, rt_insert_kwargs
 
+    # todo: modify this to produce a generator that can access internal state.
+    #  this is basically a way to create returns.
+    #  or actually: it's possibly better not even as a generator?
     def itercall(
         self,
         signal: Any = None,

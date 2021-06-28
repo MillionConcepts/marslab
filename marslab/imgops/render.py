@@ -3,10 +3,13 @@ inline rendering functions for look pipelines. can also be called on their own.
 """
 
 import io
-from functools import reduce
 from itertools import repeat
+from functools import reduce
+from operator import or_
 from typing import Union, Optional, Sequence, Collection
 
+
+from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.figure
@@ -148,7 +151,6 @@ def render_rgb_composite(channels, *, special_constants=None):
     render a composited image from three input channels. this is a good basis
     for producing both "true-color" and "enhanced-color" images from most
     filter sets.
-
     TODO: following is no longer true. move this as an interpretation step to
       Look.compile_from_instruction()
     this assumes normalization as a default option because you're presumably
@@ -168,16 +170,29 @@ def spectop_look(
     spectop=None,
     wavelengths=None,
     special_constants=None,
-    default_value=0,
+        smooth_nan = True
 ):
+    # if all([isinstance(image, np.ma.MaskedArray) for image in images]):
+    #     mask = reduce(or_, [image.mask for image in images])
+    # else:
+    #     mask = np.full(images[0].shape, False)
+
     look = spectop(images, None, wavelengths)[0]
     # ignoring nans and special constants in scaling
-    look[np.where(np.isnan(look))] = default_value
-    look[np.where(np.isinf(look))] = default_value
+    # TODO: this is far too baroque
+    # mask[np.where(np.isnan(look))] = True
+    # mask[np.where(np.isinf(look))] = True
     if special_constants is not None:
         for image in images:
-            look[np.where(np.isin(image, special_constants))] = default_value
+            look[np.where(np.isin(image, special_constants))] = np.nan
+    # TODO: replace this horrible hack with an additional set
+    if np.any(np.isnan(look)):
+        kernel = Gaussian2DKernel(1, 1)
+        look = interpolate_replace_nans(look, kernel)
     return look
+    # for image in images:
+    #     mask[np.where(np.isin(image, special_constants))] = True
+    # return np.ma.MaskedArray(look, mask)
 
 
 # TODO: cruft, this should be handled by RGBset
@@ -245,6 +260,8 @@ def make_thumbnail(
     return file_or_path_or_buffer
 
 
+# TODO: probably all of this special-case special constants handling is
+#  becoming hacky -- maybe solve it more consistently with masks?:
 def colormapped_plot(
     array: np.ndarray,
     *,
@@ -253,22 +270,32 @@ def colormapped_plot(
     no_ticks=True,
     colorbar_fp=None,
     special_constants=None,
+        drop_mask_for_display=True
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of a pipeline it
     #   shouldn't be, remove this or something
     if isinstance(array, mpl.figure.Figure):
         return array
+
     if special_constants is not None:
-        not_special = array[~np.isin(array, special_constants)]
+        not_special = array.copy()[~np.isin(array, special_constants)]
     else:
-        not_special = array
+        not_special = array.copy()
+    not_special = not_special[np.isfinite(not_special)]
+    # this now should be using masks appropriately...but perhaps it is not
     norm = plt.Normalize(vmin=not_special.min(), vmax=not_special.max())
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)
     if cmap is None:
         cmap = cm.get_cmap("Greys_r")
-    array[np.isin(array, special_constants)] = np.nan
+    if drop_mask_for_display:
+        array = array.data
+    # TODO: this probably remains hacky...but it might not
+    #  if it isn't we might want a _separate mask_
+    #  for things like partials etc.
+    # array[np.isin(array, special_constants)] = np.nan
+
     array = cmap(norm(array))
     fig = plt.figure()
     ax = fig.add_subplot()
