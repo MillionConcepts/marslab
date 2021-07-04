@@ -41,14 +41,45 @@ def make_roi_edgemaps(roi_fits, calculate_centers=True):
     return roi_edgemaps
 
 
+# TODO: nasty hack, consolidate
+def draw_edgemaps_on_axis(
+    ax,
+    edgemap_dict,
+    inscribe_names=False,
+    fontproperties=None,
+    width=4,
+    colorize=True,
+):
+    for roi_name, edgemap in edgemap_dict.items():
+        if colorize and ("color" in edgemap.keys()):
+            color = edgemap["color"]
+        else:
+            color = "white"
+        edge_y, edge_x = np.nonzero(edgemap["edgemap"])
+        ax.scatter(edge_x, edge_y, marker=".", s=width, color=color, alpha=0.4)
+        if inscribe_names:
+            ax.annotate(
+                roi_name,
+                (edgemap["center"][0] - 15, edgemap["center"][1]),
+                color="white",
+                fontproperties=fontproperties,
+                alpha=0.8,
+            )
+
+
 def draw_edgemaps_on_image(
-    image, edgemap_dict, inscribe_names=False, fontproperties=None, width=4
+    image,
+    edgemap_dict,
+    inscribe_names=False,
+    fontproperties=None,
+    width=4,
+    colorize=True,
 ):
     fig = plt.figure()
     ax = fig.add_subplot()
     ax.imshow(image, interpolation=None)
     for roi_name, edgemap in edgemap_dict.items():
-        if "color" in edgemap.keys():
+        if colorize and ("color" in edgemap.keys()):
             color = edgemap["color"]
         else:
             color = "white"
