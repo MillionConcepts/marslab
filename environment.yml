@@ -28,3 +28,5 @@ dependencies:
   - astropy
   - sympy
   - more-itertools
+  - pytest
+  - hypothesis
