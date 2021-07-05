@@ -11,6 +11,7 @@ from statistics import mean
 from typing import Optional
 
 import numpy as np
+import pandas.api.types
 import pandas as pd
 from more_itertools import windowed
 
@@ -348,6 +349,14 @@ BAND_TO_BAYER = {
 }
 
 
+def numeric_columns(data: pd.DataFrame) -> list[str]:
+    return [
+        col
+        for col in data.columns
+        if pandas.api.types.is_numeric_dtype(data[col])
+    ]
+
+
 # TODO: way too huge and messy.
 def count_rois_on_xcam_images(
     roi_hdulist,
@@ -439,7 +448,10 @@ def count_rois_on_xcam_images(
                     for stat in counts.keys()
                 }
             )
-    roi_frame = pd.DataFrame(roi_listing, dtype=np.float32)
+    roi_frame = pd.DataFrame(roi_listing)
+    roi_frame.loc[:, numeric_columns(roi_frame)] = roi_frame.loc[
+        :, numeric_columns(roi_frame)
+    ].astype(np.float32)
     cubestat_frame = roi_frame.copy()
     cubestats = []
     for eye in ("LEFT", "RIGHT"):
@@ -470,13 +482,21 @@ def count_rois_on_xcam_images(
                     for stat in cube_counts.keys()
                 }
             )
+    cubestats = cubestats.copy()
     # note pivoting automatically destroys any columns with arraylikes
-    base_df = pd.concat(
+    base_df = (
+        pd.concat(
             [
-                pd.DataFrame(cubestats, dtype=np.float32),
-                pd.DataFrame(roi_listing, dtype=np.float32),
+                pd.DataFrame(cubestats),
+                pd.DataFrame(roi_listing),
             ]
-        ).pivot_table(columns=["COLOR"]).T.reset_index()
+        )
+        .pivot_table(columns=["COLOR"])
+        .T.reset_index()
+    )
+    # copying to defragment
+    downcast = base_df[numeric_columns(base_df)].astype(np.float32)
+    base_df.loc[:, numeric_columns(base_df)] = downcast.values
     # enter nan columns for err and mean only -- this is a format
     # standardization choice
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
