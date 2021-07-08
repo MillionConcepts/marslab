@@ -466,7 +466,8 @@ def count_rois_on_xcam_images(
             continue
         eye_values.index = cubestat_frame["COLOR"]
         melted = pd.melt(eye_values, ignore_index=False).dropna()
-        for roi_name in cubestat_frame["COLOR"].unique():
+        roi_index = left_hdu_names if eye == "LEFT" else right_hdu_names
+        for roi_name in roi_index:
             cube_counts = roi_stats(
                 np.hstack(melted.loc[roi_name]["value"].values)
             )
