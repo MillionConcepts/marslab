@@ -1,7 +1,7 @@
 """
 image processing utility functions
 """
-from collections.abc import (
+from typing import (
     Callable,
     Sequence,
     Mapping,

@@ -47,8 +47,11 @@ def decorrelation_stretch(
     (github.com/lbrabec/decorrstretch) and Christian Tate (unreleased).
 
     channels: must be at least two ndarrays, numeric dtypes. each ndarray
-    should be 2D (size > 1). no nans. integer arrays will be cast to float32.
-    float arrays of depth < 32 will be cast to float32.
+    should be 2D (size > 1). no infs or nans. no channel may have entirely
+    equal elements. extremely large variation in array means between channels
+    relative to data type may result in errors.
+    integer arrays will be cast to float32. float arrays of depth < 32 will
+    be cast to float32.
     contrast_stretch: float or sequence of two floats. each must be
     between 0 and 100 inclusive. percentile ranges to use as max/min bounds
     of output array.
@@ -70,7 +73,7 @@ def decorrelation_stretch(
         working_dtype = np.float32
     else:
         working_dtype = channel_vectors.dtype
-    channel_covariance = np.cov(channel_vectors.T, dtype=working_dtype)
+    channel_covariance = np.cov(channel_vectors.T,dtype=working_dtype)
     # target per-channel standard deviation as a diagonalized matrix.
     # set equal to sigma if sigma is passed; otherwise simply set
     # equal to per-channel input standard deviation

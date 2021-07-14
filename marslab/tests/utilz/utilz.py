@@ -6,3 +6,5 @@ positive_finite_floats = st.floats(
 )
 
 finite_floats = st.floats(allow_nan=False, allow_infinity=False)
+
+finite_numbers = st.one_of(st.integers(), finite_floats)

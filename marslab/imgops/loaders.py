@@ -2,8 +2,7 @@
 generic image-loading functions for multispectral ops
 """
 import sys
-from collections.abc import Callable, Sequence
-from typing import Optional, TYPE_CHECKING, Union
+from typing import Optional, TYPE_CHECKING, Union, Callable, Sequence
 
 import numpy as np
 
