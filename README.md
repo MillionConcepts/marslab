@@ -21,7 +21,7 @@ commands:
 
 Otherwise, please follow the rest of the instructions in this file.
 
-### step 1: install conda
+### step 1: install conda and support software
 
 *If you already have Anaconda or Miniconda installed on your computer, you can
 skip this step. If it's very old and not working well, you should uninstall it first.
@@ -33,6 +33,9 @@ Download the 64-bit version of the installer for your operating system and
 follow the instructions on that website to set up your environment. Make sure
 you download Miniconda3, not Miniconda2. ```marslab``` is not compatible with
 Python 2.
+
+On Windows, depending on what else you have installed in your environment, you may also need to install
+Build Tools for Visual Studio, which you can find on this page: https://visualstudio.microsoft.com/downloads/
 
 ### step 2: create conda environment
 
