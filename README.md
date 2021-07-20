@@ -39,7 +39,11 @@ Python 2.
 Now that you have ```conda``` installed, you can set up a Python environment
 to use ```marslab```. Open up a terminal: Anaconda Prompt on Windows, Terminal on macOS,
 or your console emulator of choice on Linux. Navigate to the directory where
-you put the repository and run the command:
+you put the repository. Make sure you have git installed in your base conda environment:
+
+```conda install -n base git```
+
+After that completes, run:
 
 ```conda env create -f environment.yml```
 
