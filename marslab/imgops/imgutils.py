@@ -12,7 +12,7 @@ import gc
 from functools import partial
 from operator import methodcaller
 import sys
-from typing import Union, Any
+from typing import Union
 
 import numpy as np
 from numpy.ma import MaskedArray
@@ -77,7 +77,7 @@ def crop_all(
 
 def split_filter(
     filter_function: Callable, axis: int = -1
-) -> Callable[Any, np.ndarray]:
+) -> Callable:
     """
     produce a 'split' version of a filter that applies itself to slices across
     a particular axis -- e.g., take a gaussian blur function, return a function
@@ -221,7 +221,8 @@ def bilinear_interpolate_subgrid(
 ) -> np.ndarray:
     """
     interpolate 2D values to a 2D array, gridding those values
-    according to a regular pattern.
+    according to a regular pattern. input array must be of an
+    integer or float dtype.
 
     this is a special case for pixel classes that are defined as unique
     positions within m x n subgrids that tile the coordinate space.

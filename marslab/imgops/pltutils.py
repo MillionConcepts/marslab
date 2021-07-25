@@ -3,6 +3,7 @@ utility functions for dealing with matplotlib
 """
 import io
 
+from matplotlib.colorbar import Colorbar
 from matplotlib.axes import Subplot
 from matplotlib.figure import Figure
 from matplotlib import pyplot as plt
@@ -27,14 +28,21 @@ def get_mpl_image(fig):
 
 def remove_ticks(ax):
     """remove ticks from axis"""
+    if isinstance(ax, Colorbar):
+        ax.set_ticks([])
+        return
     ax.set_xticks([])
     ax.set_yticks([])
 
 
 def despine(ax: Subplot, edges=("top", "bottom", "left", "right")):
     # Remove axes and bounding box for a given subplot object axes
+    if isinstance(ax, Colorbar):
+        ax.outline.set_visible(False)
+        return
     for p in edges:
         ax.spines[p].set_visible(False)
+
 
 
 def strip_axes(ax: Subplot):

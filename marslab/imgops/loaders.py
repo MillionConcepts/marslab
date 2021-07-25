@@ -2,6 +2,7 @@
 generic image-loading functions for multispectral ops
 """
 import sys
+from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Union, Callable, Sequence
 
 import numpy as np
@@ -222,12 +223,11 @@ def pil_load(
 
 # TODO:
 def pil_load_rgb(
-    path: str,
+    path: Union[str, Path],
     metadata: Optional["pd.DataFrame"] = None,
-    bands: Optional[Sequence[Union[str, int]]] = None,
 ):
     from PIL import Image
 
     image = Image.open(path)
     image.convert("RGB")
-    return pil_load_shell(image, metadata, bands)
+    return pil_load_shell(image, metadata, ("R", "G", "B"))
