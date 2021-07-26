@@ -106,7 +106,11 @@ def make_edgemap(image, threshold=0.01):
 
 
 def count_rois_on_image(
-    roi_arrays, roi_names, image, detector_mask=None, special_constants=None
+    roi_arrays,
+    roi_names,
+    image,
+    detector_mask=None,
+    special_constants=None,
 ):
     """
     expects ROIs 'unpacked' from their FITS format -- this is basically because
@@ -126,7 +130,7 @@ def count_rois_on_image(
         if detector_mask is not None:
             roi_mask = np.logical_and(roi_mask, detector_mask)
         if special_constants is not None:
-            roi_mask = np.logical_and(roi_mask, detector_mask)
+            roi_mask = np.logical_and(roi_mask, special_mask)
         # generally cases like: this ROI is drawn entirely within the missing
         # area of a partial
         if np.all(~roi_mask):
