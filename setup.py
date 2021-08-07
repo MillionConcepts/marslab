@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="marslab",
-    version="0.9.1",
+    version="0.9.2",
     url="https://github.com/millionconcepts/marslab.git",
     author="Million Concepts",
     author_email="chase@millionconcepts.com",
@@ -19,6 +19,7 @@ setup(
         "matplotlib",
         "scipy",
         "pdr",
+        "dustgoggles",
         "pillow",
         "jupyter",
         "astropy",

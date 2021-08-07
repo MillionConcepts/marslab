@@ -5,7 +5,6 @@ inline rendering functions for look pipelines. can also be called on their own.
 import io
 from itertools import repeat
 from functools import reduce
-from operator import or_
 from typing import Union, Optional, Sequence, Collection
 
 
@@ -180,7 +179,7 @@ def spectop_look(
     spectop=None,
     wavelengths=None,
     special_constants=None,
-        smooth_nan = True
+    smooth_nan = True
 ):
     # if all([isinstance(image, np.ma.MaskedArray) for image in images]):
     #     mask = reduce(or_, [image.mask for image in images])

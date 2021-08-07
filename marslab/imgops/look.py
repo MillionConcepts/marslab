@@ -6,7 +6,8 @@ from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import TYPE_CHECKING, Optional
 
-from marslab.composition import Composition
+from dustgoggles.composition import Composition
+
 import marslab.spectops
 from marslab.imgops.imgutils import map_filter, crop_all
 from marslab.imgops.render import (

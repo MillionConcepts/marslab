@@ -18,17 +18,6 @@ import numpy as np
 from numpy.ma import MaskedArray
 
 
-def get_from_all(key, mappings, default=None):
-    """
-    get all values of "key" from each dict or whatever in "mappings"
-    """
-    if isinstance(mappings, Mapping):
-        view = mappings.values()
-    else:
-        view = mappings
-    return list(map(methodcaller("get", key, default), view))
-
-
 def absolutely_destroy(thing):
     if isinstance(thing, MutableMapping):
         keys = list(thing.keys())
@@ -75,9 +64,7 @@ def crop_all(
     return [crop(array, bounds) for array in arrays]
 
 
-def split_filter(
-    filter_function: Callable, axis: int = -1
-) -> Callable:
+def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
     """
     produce a 'split' version of a filter that applies itself to slices across
     a particular axis -- e.g., take a gaussian blur function, return a function
@@ -150,9 +137,10 @@ def std_clip(image, sigma=1):
     simple clipping function that clips at multiples of an array's standard
     deviation offset from its mean
     """
-    mean = np.mean(image)
-    std = np.std(image)
-    return np.clip(image, *(mean - std * sigma, mean + std * sigma))
+    finite = np.ma.masked_invalid(image)
+    mean = np.mean(finite)
+    std = np.std(finite)
+    return np.clip(finite, *(mean - std * sigma, mean + std * sigma)).data
 
 
 # TODO: is this cruft?
@@ -274,7 +262,7 @@ def mask_below(array, value):
     return MaskedArray(array, array <= value)
 
 
-def make_mask_passer(func, mask_nans = True):
+def make_mask_passer(func, mask_nans=True):
     def mask_passer(array, *args, **kwargs):
         transformed = func(array, *args, **kwargs)
         if isinstance(array, np.ma.masked_array):

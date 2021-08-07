@@ -138,7 +138,7 @@ def rasterio_load(
 
 
 def pdr_scaler(
-    data: "pdr.Data",
+    _,
     preserve_constants: Sequence[float] = None,
     float_dtype=np.float32,
 ) -> Callable[[np.ndarray, int], np.ndarray]:
@@ -146,11 +146,14 @@ def pdr_scaler(
     make a scaling function for a particular DatasetReader object
     """
 
-    def scaler(image, band_ix):
+    def scaler(data, band_ix):
+        image = data.IMAGE
         if len(image.shape) == 3:
             image = image[band_ix].copy()
         else:
             image = image.copy()
+        if data is None:
+            return image
         if "SCALING_FACTOR" not in data.LABEL["IMAGE"].keys():
             return image
         # leaving special constants as they are
@@ -185,7 +188,7 @@ def pdr_load(
     for record in metadata:
         if record["BAND"] not in bands:
             continue
-        band_arrays[record["BAND"]] = scaler(data.IMAGE, record["IX"])
+        band_arrays[record["BAND"]] = scaler(data, record["IX"])
     return band_arrays
 
 

@@ -25,6 +25,7 @@ dependencies:
   - pathos
   - pip:
       - git+https://github.com/MillionConcepts/pdr.git
+      - git+https://github.com/MillionConcepts/dustgoggles.git
   - astropy
   - sympy
   - more-itertools

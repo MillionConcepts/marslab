@@ -15,9 +15,10 @@ from pathos.multiprocessing import ProcessPool
 import numpy as np
 import pandas as pd
 
+from dustgoggles.structures import get_from_all
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import get_from_all, absolutely_destroy, mapfilter
+from marslab.imgops.imgutils import absolutely_destroy, mapfilter
 from marslab.imgops.look import Look
 from marslab.imgops.poolutils import wait_for_it
 
@@ -350,7 +351,6 @@ class ImageBands(BandSet):
             from marslab.imgops.loaders import pil_load
             load_method = pil_load
         metadata = pd.DataFrame()
-        metadata["PATH"] = path
         super().__init__(
             metadata=metadata, load_method=load_method, **bandset_kwargs
         )
@@ -358,3 +358,4 @@ class ImageBands(BandSet):
         self.raw = load_method(path)
         metadata["BAND"] = self.raw.keys()
         metadata["IX"] = self.raw.keys()
+        metadata["PATH"] = path
