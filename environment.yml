@@ -21,8 +21,6 @@ dependencies:
   - fs
   - pathos
   - cytoolz
-  - rasterio
-  - pathos
   - pip:
       - git+https://github.com/MillionConcepts/pdr.git
       - git+https://github.com/MillionConcepts/dustgoggles.git
