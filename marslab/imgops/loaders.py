@@ -154,6 +154,8 @@ def pdr_scaler(
             image = image.copy()
         if data is None:
             return image
+        if "LABEL" not in data.keys():
+            return image
         if "SCALING_FACTOR" not in data.LABEL["IMAGE"].keys():
             return image
         # leaving special constants as they are
