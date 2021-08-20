@@ -16,6 +16,15 @@ import pandas as pd
 from more_itertools import windowed
 
 WAVELENGTH_TO_FILTER = {
+    "CCAM": {
+        400: '400',
+        440: '440',
+        535: '535',
+        600: '600',
+        670: '670',
+        750: '750',
+        840: '840'
+    },
     "ZCAM": {
         "L": {
             630: "L0R",
@@ -85,6 +94,12 @@ def make_xcam_filter_dict(abbreviation):
     """
     form filter: wavelength dictionary for mastcam-family instruments
     """
+    if abbreviation == "CCAM":
+        return { name: wavelength
+                 for wavelength, name in sorted(
+                    WAVELENGTH_TO_FILTER[abbreviation].items(), key=lambda item: item[1]
+                )
+        }
     left = {
         name: wavelength
         for wavelength, name in WAVELENGTH_TO_FILTER[abbreviation]["L"].items()
@@ -150,7 +165,7 @@ def make_canonical_averaged_filters(abbreviation):
     return {filt: caf[filt] for filt in sorted(caf, key=lambda x: caf[x])}
 
 
-XCAM_ABBREVIATIONS = ["MCAM", "ZCAM"]
+XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM"]
 DERIVED_CAM_DICT = {
     abbrev: {
         "filters": make_xcam_filter_dict(abbrev),
