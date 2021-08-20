@@ -35,4 +35,4 @@ jobs:
 
       - name: Run Tests
         shell: bash -l {0}
-        run: pytest --cov-config=.coveragerc --cov=marslab --cov=dustgoggles --cov-report xml:.coverage.xml --cov-report html:.coverage.html
+        run: pytest --cov-config=.coveragerc --cov=marslab --cov=dustgoggles --cov-report xml:.coverage.xml
