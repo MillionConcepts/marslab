@@ -1,7 +1,7 @@
 """
 image processing utility functions
 """
-from collections.abc import (
+from typing import (
     Callable,
     Sequence,
     Mapping,
@@ -12,21 +12,10 @@ import gc
 from functools import partial
 from operator import methodcaller
 import sys
-from typing import Union, Any
+from typing import Union
 
 import numpy as np
 from numpy.ma import MaskedArray
-
-
-def get_from_all(key, mappings, default=None):
-    """
-    get all values of "key" from each dict or whatever in "mappings"
-    """
-    if isinstance(mappings, Mapping):
-        view = mappings.values()
-    else:
-        view = mappings
-    return list(map(methodcaller("get", key, default), view))
 
 
 def absolutely_destroy(thing):
@@ -75,9 +64,7 @@ def crop_all(
     return [crop(array, bounds) for array in arrays]
 
 
-def split_filter(
-    filter_function: Callable, axis: int = -1
-) -> Callable[Any, np.ndarray]:
+def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
     """
     produce a 'split' version of a filter that applies itself to slices across
     a particular axis -- e.g., take a gaussian blur function, return a function
@@ -150,9 +137,10 @@ def std_clip(image, sigma=1):
     simple clipping function that clips at multiples of an array's standard
     deviation offset from its mean
     """
-    mean = np.mean(image)
-    std = np.std(image)
-    return np.clip(image, *(mean - std * sigma, mean + std * sigma))
+    finite = np.ma.masked_invalid(image)
+    mean = np.mean(finite)
+    std = np.std(finite)
+    return np.clip(finite, *(mean - std * sigma, mean + std * sigma)).data
 
 
 # TODO: is this cruft?
@@ -221,7 +209,8 @@ def bilinear_interpolate_subgrid(
 ) -> np.ndarray:
     """
     interpolate 2D values to a 2D array, gridding those values
-    according to a regular pattern.
+    according to a regular pattern. input array must be of an
+    integer or float dtype.
 
     this is a special case for pixel classes that are defined as unique
     positions within m x n subgrids that tile the coordinate space.
@@ -273,7 +262,7 @@ def mask_below(array, value):
     return MaskedArray(array, array <= value)
 
 
-def make_mask_passer(func, mask_nans = True):
+def make_mask_passer(func, mask_nans=True):
     def mask_passer(array, *args, **kwargs):
         transformed = func(array, *args, **kwargs)
         if isinstance(array, np.ma.masked_array):

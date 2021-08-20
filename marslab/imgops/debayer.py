@@ -18,9 +18,9 @@ RGGB_PATTERN = {
 
 
 def make_pattern_masks(
-    array_shape: tuple[int, int],
-    bayer_pattern: Mapping[str, tuple[int]],
-    pattern_shape: tuple[int, int],
+    array_shape: Sequence[int, int],
+    bayer_pattern: Mapping[str, Sequence[int]],
+    pattern_shape: Sequence[int, int],
 ) -> dict[str, tuple]:
     """
     given (y, x) array shape and a dict of tuples defining grid class names

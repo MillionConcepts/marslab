@@ -2,8 +2,8 @@
 generic image-loading functions for multispectral ops
 """
 import sys
-from collections.abc import Callable, Sequence
-from typing import Optional, TYPE_CHECKING, Union
+from pathlib import Path
+from typing import Optional, TYPE_CHECKING, Union, Callable, Sequence
 
 import numpy as np
 
@@ -138,7 +138,7 @@ def rasterio_load(
 
 
 def pdr_scaler(
-    data: "pdr.Data",
+    _,
     preserve_constants: Sequence[float] = None,
     float_dtype=np.float32,
 ) -> Callable[[np.ndarray, int], np.ndarray]:
@@ -146,11 +146,16 @@ def pdr_scaler(
     make a scaling function for a particular DatasetReader object
     """
 
-    def scaler(image, band_ix):
+    def scaler(data, band_ix):
+        image = data.IMAGE
         if len(image.shape) == 3:
             image = image[band_ix].copy()
         else:
             image = image.copy()
+        if data is None:
+            return image
+        if "LABEL" not in data.keys():
+            return image
         if "SCALING_FACTOR" not in data.LABEL["IMAGE"].keys():
             return image
         # leaving special constants as they are
@@ -185,7 +190,7 @@ def pdr_load(
     for record in metadata:
         if record["BAND"] not in bands:
             continue
-        band_arrays[record["BAND"]] = scaler(data.IMAGE, record["IX"])
+        band_arrays[record["BAND"]] = scaler(data, record["IX"])
     return band_arrays
 
 
@@ -223,12 +228,11 @@ def pil_load(
 
 # TODO:
 def pil_load_rgb(
-    path: str,
+    path: Union[str, Path],
     metadata: Optional["pd.DataFrame"] = None,
-    bands: Optional[Sequence[Union[str, int]]] = None,
 ):
     from PIL import Image
 
     image = Image.open(path)
     image.convert("RGB")
-    return pil_load_shell(image, metadata, bands)
+    return pil_load_shell(image, metadata, ("R", "G", "B"))

@@ -3,23 +3,25 @@ defines a class for organizing and performing bulk rendering operations on
 multispectral image products
 """
 import logging
+import os
 from collections.abc import Mapping, Callable, Collection, Sequence
 from itertools import chain
+from pathlib import Path
 from typing import Optional, Union
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
 from cytoolz.dicttoolz import merge
-import dill
 from pathos.multiprocessing import ProcessPool
 import numpy as np
 import pandas as pd
 
+from dustgoggles.structures import get_from_all
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import get_from_all, absolutely_destroy, mapfilter
-from marslab.imgops.look import Look
-from marslab.imgops.poolutils import wait_for_it
+from marslab.imgops.imgutils import absolutely_destroy, mapfilter
+from marslab.imgops.look import Look, save_plainly
+from marslab.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +91,7 @@ class BandSet:
         self.name = name
         self.counts = None
         self.threads = threads
+        self.local_files = []
         if isinstance(metadata, pd.DataFrame):
             if "IX" not in metadata.columns:
                 metadata["IX"] = 0
@@ -339,6 +342,44 @@ class BandSet:
         else:
             raise ValueError(str(what) + " is not a valid cache type.")
 
+    @staticmethod
+    def write_plain_image(look, look_name, outpath, pool, prefix, results):
+        filename = look_name + ".png"
+        if prefix is not None:
+            filename = f"{prefix} {filename}"
+        if pool is None:
+            save_plainly(look, filename, outpath)
+            log.info("wrote " + filename)
+        else:
+            results[filename] = pool.apipe(save_plainly, look, filename,
+                                           outpath)
+        return filename
+
+    def save_looks(self, outpath, prefix=None, threads=None):
+        if prefix is None:
+            prefix = self.name
+        pool = None
+        results = {}
+        # TODO: dispatch these cases
+        if threads is not None:
+            log.info("... initializing worker pool ...")
+            pool = ProcessPool(threads)
+            pool.restart()
+            log.info("... serializing images ...")
+        for look_name, look in self.looks.items():
+            # TODO: ugh.
+            image_path = str(outpath)
+            if not os.path.exists(image_path):
+                os.makedirs(image_path)
+            filename = self.write_plain_image(
+                look, look_name, image_path, pool, prefix, results
+            )
+            self.local_files.append(str(Path(image_path, filename)))
+        if pool is not None:
+            # TODO: extend this, generally speaking, to give useful messages
+            #  about failure
+            wait_for_it(pool, results, log, "wrote ")
+
 
 class ImageBands(BandSet):
     """
@@ -350,7 +391,6 @@ class ImageBands(BandSet):
             from marslab.imgops.loaders import pil_load
             load_method = pil_load
         metadata = pd.DataFrame()
-        metadata["PATH"] = path
         super().__init__(
             metadata=metadata, load_method=load_method, **bandset_kwargs
         )
@@ -358,3 +398,4 @@ class ImageBands(BandSet):
         self.raw = load_method(path)
         metadata["BAND"] = self.raw.keys()
         metadata["IX"] = self.raw.keys()
+        metadata["PATH"] = path

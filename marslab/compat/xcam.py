@@ -15,7 +15,6 @@ import pandas.api.types
 import pandas as pd
 from more_itertools import windowed
 
-
 WAVELENGTH_TO_FILTER = {
     "ZCAM": {
         "L": {
@@ -345,6 +344,28 @@ BAND_TO_BAYER = {
         "R0G": ("green_1", "green_2"),
         "R0B": "blue",
         "R0R": "red",
+    },
+    "MCAM": {
+        "L1": ("green_1", "green_2"),
+        "L2": "blue",
+        "L3": "red",
+        "L4": "red",
+        "L5": None,
+        "L6": None,
+        "R1": ("green_1", "green_2"),
+        "R2": "blue",
+        "R3": "red",
+        "R4": None,
+        "R5": None,
+        "R6": None,
+        # these are apparently debayered onboard or always debayered
+        # by the time we see reduced images
+        "L0G": None,
+        "L0B": None,
+        "L0R": None,
+        "R0G": None,
+        "R0B": None,
+        "R0R": None,
     },
 }
 

@@ -4,9 +4,12 @@ utilities for composing lightweight imaging pipelines
 from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from marslab.composition import Composition
+import matplotlib.figure
+from dustgoggles.composition import Composition
+
 import marslab.spectops
 from marslab.imgops.imgutils import map_filter, crop_all
 from marslab.imgops.render import (
@@ -180,3 +183,17 @@ class Look(Composition, ABC):
                     ].iloc[0]
                 )
             self._add_wavelengths(wavelengths)
+
+
+def save_plainly(look, filename, outpath, dpi=275):
+    if isinstance(look, matplotlib.figure.Figure):
+        for ix, axis in enumerate(look.axes):
+            if ix > 0:
+                axis.remove()
+            else:
+                axis.axis("off")
+        look.savefig(
+            Path(outpath, filename), dpi=dpi, bbox_inches="tight", pad_inches=0
+        )
+    else:
+        look.save(Path(outpath, filename))
