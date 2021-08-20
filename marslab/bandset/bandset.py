@@ -21,7 +21,7 @@ from dustgoggles.structures import get_from_all
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import absolutely_destroy, mapfilter
 from marslab.imgops.look import Look, save_plainly
-from marslab.imgops.poolutils import wait_for_it
+from marslab.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
 

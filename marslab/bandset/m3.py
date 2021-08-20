@@ -1,3 +1,8 @@
+"""
+skeleton BandSet implementation for M3 images -- expects files that have been
+processed by pdr.converter
+"""
+
 from functools import partial
 
 import numpy as np
@@ -8,7 +13,7 @@ from marslab.compat.m3 import (
     TARGET_WAVELENGTHS,
     GLOBAL_WAVELENGTHS,
 )
-from marslab.imgops.bandset import BandSet
+from marslab.bandset.bandset import BandSet
 from marslab.imgops.loaders import pdr_load
 
 

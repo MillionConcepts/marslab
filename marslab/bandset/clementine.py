@@ -1,3 +1,5 @@
+"""skeleton BandSet implementation for Clementine mosaics"""
+
 from functools import partial
 from pathlib import Path
 
@@ -7,7 +9,7 @@ from marslab.compat.clementine import (
     WAVELENGTH_TO_FILTER,
     MOSAIC_SPECIAL_CONSTANTS,
 )
-from marslab.imgops.bandset import BandSet
+from marslab.bandset.bandset import BandSet
 from marslab.imgops.loaders import rasterio_load
 
 

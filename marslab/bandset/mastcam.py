@@ -1,3 +1,5 @@
+"""skeleton BandSet for MSL Mastcam multispectral observations"""
+
 from functools import cache, partial
 from operator import attrgetter
 from pathlib import Path
@@ -7,7 +9,7 @@ import pandas as pd
 from dustgoggles.scrape import bulk_scrape_metadata, scrape_patterns
 
 from marslab.compat.xcam import DERIVED_CAM_DICT, BAND_TO_BAYER
-from marslab.imgops.bandset import BandSet
+from marslab.bandset.bandset import BandSet
 from marslab.imgops.debayer import RGGB_PATTERN
 from marslab.imgops.loaders import pdr_load
 

@@ -1,12 +1,8 @@
 import numpy as np
 
 from marslab.tests.utilz.bandset_utilz import (
-    mock_load,
-    noise_image_loader,
     make_random_bandset,
 )
-
-from marslab.imgops.bandset import BandSet
 
 
 def test_random_bandset():
