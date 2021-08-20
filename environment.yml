@@ -28,4 +28,5 @@ dependencies:
   - sympy
   - more-itertools
   - pytest
+  - pytest-cov
   - hypothesis
