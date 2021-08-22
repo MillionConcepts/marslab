@@ -21,6 +21,7 @@ dependencies:
   - fs
   - pathos
   - cytoolz
+  - dateutil
   - pip:
       - git+https://github.com/MillionConcepts/pdr.git
       - git+https://github.com/MillionConcepts/dustgoggles.git

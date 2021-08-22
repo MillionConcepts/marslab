@@ -1,17 +1,15 @@
 """
 image processing utility functions
 """
+import gc
+import sys
+from functools import partial
 from typing import (
     Callable,
     Sequence,
-    Mapping,
     MutableMapping,
     Collection,
 )
-import gc
-from functools import partial
-from operator import methodcaller
-import sys
 from typing import Union
 
 import numpy as np
@@ -28,7 +26,7 @@ def absolutely_destroy(thing):
             del _
     del thing
     if "matplotlib.pyplot" in sys.modules.keys():
-        sys.modules["matplotlib.pyplot"].close("all")
+        getattr(sys.modules["matplotlib.pyplot"], "close")("all")
     gc.collect()
 
 

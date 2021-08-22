@@ -141,12 +141,12 @@ def pdr_scaler(
     _,
     preserve_constants: Sequence[float] = None,
     float_dtype=np.float32,
-) -> Callable[[np.ndarray, int], np.ndarray]:
+) -> Callable[["pdr.Data", int], np.ndarray]:
     """
     make a scaling function for a particular DatasetReader object
     """
 
-    def scaler(data, band_ix):
+    def scaler(data: pdr.Data, band_ix: int) -> np.ndarray:
         image = data.IMAGE
         if len(image.shape) == 3:
             image = image[band_ix].copy()

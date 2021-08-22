@@ -20,6 +20,7 @@ import pandas as pd
 
 # TODO: make all kwarg signatures flatly identical
 
+
 def preprocess_input(reflectance, errors=None, wavelengths=None):
     """
     did someone pass this function something silly? raise an issue.
@@ -144,8 +145,12 @@ def band_depth(
     reflectance_array, error_array, wavelength_array = preprocess_input(
         reflectance, errors, wavelengths
     )
-    # assert np.shape(reflectance_array)[1]==3, 'band depth requires exactly 3 bands'
-    # assert np.shape(wavelength_array)[1]==3, 'band depth requires exactly 3 bands'
+    assert (
+        np.shape(reflectance_array)[0] == 3
+    ), "band depth requires exactly 3 bands"
+    assert (
+        np.shape(wavelength_array)[0] == 3
+    ), "band depth requires exactly 3 bands"
     # just for clarity
     wave_left = wavelength_array[0]
     wave_right = wavelength_array[1]
