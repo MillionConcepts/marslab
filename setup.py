@@ -35,6 +35,6 @@ setup(
         "pathos",
         "hypothesis",
         "pytest",
-        "dateutil"
+        "python-dateutil"
     ],
 )
