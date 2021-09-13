@@ -7,7 +7,7 @@ import os
 from collections.abc import Mapping, Callable, Collection, Sequence
 from itertools import chain
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, MutableMapping
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
@@ -21,7 +21,7 @@ from dustgoggles.structures import get_from_all
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import absolutely_destroy, mapfilter
 from marslab.imgops.look import Look, save_plainly
-from marslab.imgops.poolutils import wait_for_it
+from marslab.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
 
@@ -36,12 +36,12 @@ class BandSet:
     def __init__(
         self,
         metadata: pd.DataFrame = None,
-        rois: Mapping = None,
-        bayer_info: Mapping = None,
+        rois: MutableMapping = None,
+        bayer_info: MutableMapping = None,
         load_method: Callable = None,
         name: str = None,
         threads: Mapping = None,
-        raw: Mapping = None,
+        raw: MutableMapping = None,
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -148,6 +148,8 @@ class BandSet:
         self.raw |= merge(results)
 
     def make_db_masks(self, shape: Sequence[int, int] = None, remake=False):
+        if self.bayer_info is None:
+            raise ValueError("can't make debayer masks with no debayer info.")
         if "masks" in self.bayer_info.keys():
             if remake is False:
                 return
@@ -351,8 +353,9 @@ class BandSet:
             save_plainly(look, filename, outpath)
             log.info("wrote " + filename)
         else:
-            results[filename] = pool.apipe(save_plainly, look, filename,
-                                           outpath)
+            results[filename] = pool.apipe(
+                save_plainly, look, filename, outpath
+            )
         return filename
 
     def save_looks(self, outpath, prefix=None, threads=None):
@@ -389,6 +392,7 @@ class ImageBands(BandSet):
     def __init__(self, path, load_method=None, **bandset_kwargs):
         if load_method is None:
             from marslab.imgops.loaders import pil_load
+
             load_method = pil_load
         metadata = pd.DataFrame()
         super().__init__(

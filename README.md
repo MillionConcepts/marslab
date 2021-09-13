@@ -21,7 +21,7 @@ commands:
 
 Otherwise, please follow the rest of the instructions in this file.
 
-### step 1: install conda
+### step 1: install conda and support software
 
 *If you already have Anaconda or Miniconda installed on your computer, you can
 skip this step. If it's very old and not working well, you should uninstall it first.
@@ -34,12 +34,19 @@ follow the instructions on that website to set up your environment. Make sure
 you download Miniconda3, not Miniconda2. ```marslab``` is not compatible with
 Python 2.
 
+On Windows, depending on what else you have installed in your environment, you may also need to install
+Build Tools for Visual Studio, which you can find on this page: https://visualstudio.microsoft.com/downloads/
+
 ### step 2: create conda environment
 
 Now that you have ```conda``` installed, you can set up a Python environment
 to use ```marslab```. Open up a terminal: Anaconda Prompt on Windows, Terminal on macOS,
 or your console emulator of choice on Linux. Navigate to the directory where
-you put the repository and run the command:
+you put the repository. Make sure you have git installed in your base conda environment:
+
+```conda install -n base git```
+
+After that completes, run:
 
 ```conda env create -f environment.yml```
 

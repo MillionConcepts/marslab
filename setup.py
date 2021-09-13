@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="marslab",
-    version="0.9.2",
+    version="0.9.3",
     url="https://github.com/millionconcepts/marslab.git",
     author="Million Concepts",
     author_email="chase@millionconcepts.com",
@@ -34,6 +34,7 @@ setup(
         "rasterio",
         "pathos",
         "hypothesis",
-        "pytest"
+        "pytest",
+        "python-dateutil"
     ],
 )

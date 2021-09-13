@@ -21,6 +21,7 @@ dependencies:
   - fs
   - pathos
   - cytoolz
+  - python-dateutil
   - pip:
       - git+https://github.com/MillionConcepts/pdr.git
       - git+https://github.com/MillionConcepts/dustgoggles.git
@@ -28,4 +29,5 @@ dependencies:
   - sympy
   - more-itertools
   - pytest
+  - pytest-cov
   - hypothesis

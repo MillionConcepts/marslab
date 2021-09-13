@@ -5,7 +5,7 @@ import pandas as pd
 from cytoolz import merge
 from numpy.random import default_rng
 
-from marslab.imgops.bandset import log, BandSet
+from marslab.bandset.bandset import log, BandSet
 
 rng = default_rng()
 

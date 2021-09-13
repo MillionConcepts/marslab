@@ -72,7 +72,7 @@ def decorrelation_stretch(
         working_dtype = np.float32
     else:
         working_dtype = channel_vectors.dtype
-    channel_covariance = np.cov(channel_vectors.T,dtype=working_dtype)
+    channel_covariance = np.cov(channel_vectors.T, dtype=working_dtype)
     # target per-channel standard deviation as a diagonalized matrix.
     # set equal to sigma if sigma is passed; otherwise simply set
     # equal to per-channel input standard deviation
@@ -179,7 +179,7 @@ def spectop_look(
     spectop=None,
     wavelengths=None,
     special_constants=None,
-    smooth_nan = True
+    # smooth_nan=True,
 ):
     # if all([isinstance(image, np.ma.MaskedArray) for image in images]):
     #     mask = reduce(or_, [image.mask for image in images])
@@ -279,7 +279,7 @@ def colormapped_plot(
     no_ticks=True,
     colorbar_fp=None,
     special_constants=None,
-        drop_mask_for_display=True
+    drop_mask_for_display=True,
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of a pipeline it
