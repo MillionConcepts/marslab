@@ -5,7 +5,7 @@ instruments (PCAM, MCAM, ZCAM...), affording consistent interpretation
 of operations on individual spectra
 """
 from collections.abc import Mapping, Sequence
-from itertools import chain, combinations
+from itertools import chain, combinations, product
 from math import floor
 from statistics import mean
 from typing import Optional
@@ -14,6 +14,8 @@ import numpy as np
 import pandas.api.types
 import pandas as pd
 from more_itertools import windowed
+
+from marslab.imgops.regions import roi_position
 
 WAVELENGTH_TO_FILTER = {
     "ZCAM": {
@@ -398,19 +400,13 @@ def count_rois_on_xcam_images(
     from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
     from marslab.imgops.regions import count_rois_on_image, roi_stats
 
-    roi_listing = []
     # unrolling for easier iteration
     roi_hdus = [roi_hdulist[hdu_ix] for hdu_ix in roi_hdulist]
-    left_hdus = [
-        hdu for hdu in roi_hdus if hdu.header["EYE"].upper() == "LEFT"
-    ]
-    right_hdus = [
-        hdu for hdu in roi_hdus if hdu.header["EYE"].upper() == "RIGHT"
-    ]
-    left_hdu_arrays = [hdu.data for hdu in left_hdus]
-    left_hdu_names = [hdu.header["NAME"] for hdu in left_hdus]
-    right_hdu_arrays = [hdu.data for hdu in right_hdus]
-    right_hdu_names = [hdu.header["NAME"] for hdu in right_hdus]
+    rois = {}
+    for eye in ("LEFT", "RIGHT"):
+        hdus = [hdu for hdu in roi_hdus if hdu.header["EYE"].upper() == eye]
+        rois[eye] = {hdu.header["NAME"]: hdu.data for hdu in hdus}
+
     if bayer_pixel_dict is None:
         bayer_pixel_dict = BAND_TO_BAYER[instrument]
     if not all([pixel is None for pixel in bayer_pixel_dict.values()]):
@@ -419,6 +415,8 @@ def count_rois_on_xcam_images(
         )
     else:
         bayer_masks = None
+    roi_listing = []
+
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
         image = xcam_image_dict.get(filter_name)
         if image is None:
@@ -445,16 +443,9 @@ def count_rois_on_xcam_images(
                 flag_mask = np.full(image.shape, True)
                 flag_mask[np.where(np.isin(base_pixel_map, [1, 2, 4]))] = False
                 detector_mask = np.logical_and(detector_mask, flag_mask)
-        if filter_name.upper().startswith("L"):
-            roi_arrays = left_hdu_arrays
-            roi_names = left_hdu_names
-        elif filter_name.upper().startswith("R"):
-            roi_arrays = right_hdu_arrays
-            roi_names = right_hdu_names
-        else:
-            raise ValueError(filter_name + " is a forbidden filter")
+        eye = "LEFT" if filter_name.upper().startswith("L") else "RIGHT"
         roi_counts = count_rois_on_image(
-            roi_arrays, roi_names, image, detector_mask, [0]
+            rois[eye].values(), rois[eye].keys(), image, detector_mask, [0]
         )
         for roi_name, counts in roi_counts.items():
             roi_listing.append(
@@ -487,21 +478,23 @@ def count_rois_on_xcam_images(
             continue
         eye_values.index = cubestat_frame["COLOR"]
         melted = pd.melt(eye_values, ignore_index=False).dropna()
-        roi_index = left_hdu_names if eye == "LEFT" else right_hdu_names
-        for roi_name in roi_index:
+        for roi_name in rois[eye].keys():
             cube_counts = roi_stats(
                 np.hstack(melted.loc[roi_name]["value"].values)
             )
+            position = roi_position(rois[eye][roi_name])
             cubestats.append(
                 {
-                    "COLOR": roi_name,
-                    eye: cube_counts["mean"],
-                    eye + "_ERR": cube_counts["err"],
-                    eye + "_MODE": cube_counts["mode"][0],
-                }
-                | {
                     eye + "_" + stat.upper(): cube_counts[stat]
                     for stat in cube_counts.keys()
+                }
+                | {
+                    "COLOR": roi_name,
+                    eye: cube_counts["mean"],
+                    f"{eye}_ROW": position["y"],
+                    f"{eye}_COLUMN": position["x"],
+                    f"{eye}_DET_RAD": position["r"],
+                    f"{eye}_DET_THETA": position["theta"],
                 }
             )
     cubestats = cubestats.copy()
@@ -516,6 +509,19 @@ def count_rois_on_xcam_images(
         .pivot_table(columns=["COLOR"])
         .T.reset_index()
     )
+    measures = ("ROW", "COLUMN", "DET_RAD", "DET_THETA")
+    for measure in measures:
+        base_df[measure] = np.nan
+    for ix, row in base_df.iterrows():
+        existing = row.dropna()
+        for measure in measures:
+            oculars = [
+                ocular for ocular in (f"LEFT_{measure}", f"RIGHT_{measure}")
+                if ocular in existing.index
+            ]
+            base_df.loc[ix, measure] = np.mean(
+                [row[ocular] for ocular in oculars]
+            )
     # copying to defragment
     downcast = base_df[numeric_columns(base_df)].astype(np.float32)
     base_df.loc[:, numeric_columns(base_df)] = downcast.values

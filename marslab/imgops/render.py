@@ -204,7 +204,7 @@ def spectop_look(
     # return np.ma.MaskedArray(look, mask)
 
 
-# TODO: cruft, this should be handled by RGBset
+# TODO: cruft, this should be handled by BandSet -- but is it?
 def rgb_from_bayer(
     image,
     bayer_pattern,

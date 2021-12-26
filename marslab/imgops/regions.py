@@ -12,6 +12,16 @@ def furthest_from_edge(image):
     return np.unravel_index(distances.argmax(), distances.shape)
 
 
+def roi_position(roi):
+    y, x = tuple(map(np.median, np.nonzero(roi)))
+    return {
+        "y": y,
+        "x": x,
+        "r": np.sqrt(y**2 + x**2),
+        "theta": np.arctan2(y, x)
+    }
+
+
 def roi_stats(array, extended=True):
     base = {"mean": array.mean(), "err": array.std(), "values": array.ravel()}
     if extended:

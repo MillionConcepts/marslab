@@ -141,7 +141,6 @@ def std_clip(image, sigma=1):
     return np.clip(finite, *(mean - std * sigma, mean + std * sigma)).data
 
 
-# TODO: is this cruft?
 def minmax_clip(image, stretch=(0, 0)):
     """
     simple minmax clip that optionally cheats 0 up and 1 down at multiples
@@ -159,6 +158,9 @@ def minmax_clip(image, stretch=(0, 0)):
     )
 
 
+# TODO: would it be better for these functions to use flat mask arrays
+#  rather than coordinate grids? (performance is the same, question is
+#  interface convenience)
 def bilinear_interpolate(
     input_array: np.ndarray,
     output_shape: tuple[int, int],
@@ -166,10 +168,6 @@ def bilinear_interpolate(
     x_coords: np.ndarray,
 ) -> np.ndarray:
     """
-    TODO: would it be better for these functions to use flat mask arrays
-        rather than coordinate grids? (performance is the same, question is
-        interface convenience
-
     upsample a 2D array, gridding its pixels at y-coordinates given in y_coords
     and x-coordinates given in x_coords and linearly interpolating from there,
     first in the x direction and then in the y direction. y_coords and x_coords
