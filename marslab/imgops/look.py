@@ -4,6 +4,7 @@ utilities for composing lightweight imaging pipelines
 from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
+from inspect import signature
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -17,6 +18,7 @@ from marslab.imgops.render import (
     spectop_look,
     render_rgb_composite,
     decorrelation_stretch,
+    render_nested_rgb_composite,
 )
 
 if TYPE_CHECKING:
@@ -31,6 +33,8 @@ def look_to_function(look: str) -> Callable:
         return render_rgb_composite
     elif look == "dcs":
         return decorrelation_stretch
+    elif look == "nested_composite":
+        return render_nested_rgb_composite
     else:
         raise ValueError("unknown look operation " + look)
 
@@ -45,9 +49,7 @@ def interpret_look_step(instruction):
         if isinstance(step, str):
             step = look_to_function(step)
     except KeyError:
-        raise ValueError(
-            "The instruction must include at least a look type."
-        )
+        raise ValueError("The instruction must include at least a look type.")
     return step, instruction.get("params", {})
 
 
@@ -110,7 +112,7 @@ class Look(Composition, ABC):
         super().__init__(*args, **kwargs)
         self.metadata = metadata
         self.bands = bands
-        if (self.metadata is not None) and (self.bands is not None):
+        if self.metadata is not None:
             self.populate_kwargs_from_metadata()
 
     def _add_wavelengths(self, wavelengths: Sequence[float]):
@@ -155,7 +157,7 @@ class Look(Composition, ABC):
             "postfilter",
             "overlay",
             "plotter",
-            "bang"
+            "bang",
         )
         steps = {}
         parameters = {}
@@ -172,17 +174,23 @@ class Look(Composition, ABC):
             bands=instruction.get("bands"),
         )
 
+    # TODO: is this excessively baroque; would an internal dispatch be better?
     def populate_kwargs_from_metadata(self):
-        assert (self.bands is not None) and (self.metadata is not None)
-        if "WAVELENGTH" in self.metadata.columns:
-            wavelengths = []
-            for band in self.bands:
-                wavelengths.append(
-                    self.metadata.loc[
-                        self.metadata["BAND"] == band, "WAVELENGTH"
-                    ].iloc[0]
-                )
-            self._add_wavelengths(wavelengths)
+        if "metadata" in [
+            param.name
+            for param in signature(self.steps['look']).parameters.values()
+        ]:
+            self.add_kwargs("look", metadata=self.metadata)
+        if self.bands is not None:
+            if "WAVELENGTH" in self.metadata.columns:
+                wavelengths = []
+                for band in self.bands:
+                    wavelengths.append(
+                        self.metadata.loc[
+                            self.metadata["BAND"] == band, "WAVELENGTH"
+                        ].iloc[0]
+                    )
+                self._add_wavelengths(wavelengths)
 
 
 def save_plainly(look, filename, outpath, dpi=275):

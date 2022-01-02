@@ -5,21 +5,20 @@ multispectral image products
 import logging
 import os
 from collections.abc import Mapping, Callable, Collection, Sequence
-from itertools import chain
 from pathlib import Path
 from typing import Optional, Union, MutableMapping
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
+
 from cytoolz.dicttoolz import merge
 from pathos.multiprocessing import ProcessPool
 import numpy as np
 import pandas as pd
 
-from dustgoggles.structures import get_from_all
-
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import absolutely_destroy, mapfilter
+from marslab.imgops.imgutils import absolutely_destroy, mapfilter, \
+    get_all_bands, get_all_bands_from_all
 from marslab.imgops.look import Look, save_plainly
 from marslab.poolutils import wait_for_it
 
@@ -262,9 +261,7 @@ class BandSet:
         if requested, also load/cache images, debayering as required.
         """
         # what bands do we want?
-        desired_bands = set(
-            chain.from_iterable(get_from_all("bands", instructions))
-        )
+        desired_bands = get_all_bands_from_all(instructions)
         # try to get them, if we don't have them yet
         if (autoload is True) and (self.metadata is not None):
             self.load(desired_bands, quiet=True)
@@ -274,8 +271,10 @@ class BandSet:
             )
         # what looks can we make with what we have?
         available_looks = mapfilter(
-            lambda bands: set(bands).issubset(tuple(self.raw.keys())),
-            "bands",
+            lambda instruction: set(get_all_bands(instruction)).issubset(
+                tuple(self.raw.keys())
+            ),
+            None,
             instructions,
         )
         for op in [op for op in instructions if op not in available_looks]:
@@ -303,12 +302,22 @@ class BandSet:
                 op_name = (
                     instruction["look"] + "_" + "_".join(instruction["bands"])
                 )
-            op_images = [
-                self.get_band(band).copy() for band in instruction["bands"]
-            ]
-            base_image = None
+            if instruction["look"] not in ["nested_composite"]:
+                op_images = [
+                    self.get_band(band).copy() for band in instruction["bands"]
+                ]
+            else:
+                # TODO: maybe generalize...and/or dispatch this all better.
+                op_images = {
+                    channel: [
+                        self.get_band(band).copy()
+                        for band in instruction['params'][channel]["bands"]
+                    ]
+                    for channel in ("red", "green", "blue")
+                }
+            instruction_kwargs = {}
             if instruction.get("overlay") is not None:
-                base_image = self.get_band(
+                instruction_kwargs["base_image"] = self.get_band(
                     instruction["overlay"]["band"]
                 ).copy()
             # make processing pipeline fron instruction
@@ -320,11 +329,11 @@ class BandSet:
             # for spectops are added automagically by the Look compiler.
             if pool is not None:
                 look_cache[op_name] = pool.apipe(
-                    pipeline.execute, op_images, base_image=base_image
+                    pipeline.execute, op_images, **instruction_kwargs
                 )
             else:
                 look_cache[op_name] = pipeline.execute(
-                    op_images, base_image=base_image
+                    op_images, **instruction_kwargs
                 )
                 log.info("generated " + op_name)
         if pool is not None:
@@ -403,3 +412,5 @@ class ImageBands(BandSet):
         metadata["BAND"] = self.raw.keys()
         metadata["IX"] = self.raw.keys()
         metadata["PATH"] = path
+
+
