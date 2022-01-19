@@ -17,7 +17,6 @@ import numpy as np
 from numpy.linalg import norm
 import pandas as pd
 
-
 # TODO: make all kwarg signatures flatly identical
 
 
@@ -75,7 +74,8 @@ def ratio(
     reflectance_array, error_array, _wavelength_array = preprocess_input(
         reflectance, errors, _wavelengths
     )
-    ratio_value = reflectance_array[0] / reflectance_array[1]
+    # set to zero in divide-by-zero case
+    ratio_value = np.where(reflectance_array[1] == 0, 0, reflectance_array[0] / reflectance_array[1])
     if None not in error_array:
         error_array = error_array[0:2]
     error_values = addition_in_quadrature(error_array)
