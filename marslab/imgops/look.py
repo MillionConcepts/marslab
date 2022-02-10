@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from inspect import signature
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Collection, Any
 
 import matplotlib.figure
 from dustgoggles.composition import Composition
@@ -107,13 +107,15 @@ class Look(Composition, ABC):
         *args,
         metadata: "pd.DataFrame" = None,
         bands: tuple[str] = None,
+        special_constants: Collection[Any] = None,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.metadata = metadata
         self.bands = bands
-        if self.metadata is not None:
-            self.populate_kwargs_from_metadata()
+        self.special_constants = special_constants
+        if (self.metadata is not None) or (self.special_constants is not None):
+            self.populate_kwargs()
 
     def _add_wavelengths(self, wavelengths: Sequence[float]):
         look = self.steps["look"]
@@ -141,14 +143,16 @@ class Look(Composition, ABC):
 
     @classmethod
     def compile_from_instruction(
-        cls, instruction: Mapping, metadata: "pd.DataFrame" = None
+        cls,
+        instruction: Mapping,
+        metadata: "pd.DataFrame" = None,
+        special_constants: Collection[Any] = None
     ):
         """
         compile a look instruction into a rendering pipeline
         """
         # all of cropper, pre, post, overlay, plotter can potentially be
-        # absent --
-        # these are _possible_ steps in the pipeline.
+        # absent. these are _possible_ steps in the pipeline.
         step_names = (
             "crop",
             "prefilter",
@@ -171,16 +175,18 @@ class Look(Composition, ABC):
             steps,
             parameters=parameters,
             metadata=metadata,
+            special_constants=special_constants,
             bands=instruction.get("bands"),
         )
 
     # TODO: is this excessively baroque; would an internal dispatch be better?
-    def populate_kwargs_from_metadata(self):
-        if "metadata" in [
-            param.name
-            for param in signature(self.steps['look']).parameters.values()
-        ]:
-            self.add_kwargs("look", metadata=self.metadata)
+    def populate_kwargs(self):
+        for step in self.steps:
+            params = signature(self.steps[step]).parameters.values()
+            param_names  = [param.name for param in params]
+            for thing in ("special_constants", "metadata"):
+                if (hasattr(self, thing)) and (thing in param_names):
+                    self.add_kwargs(step, **{thing: getattr(self, thing)})
         if self.bands is not None:
             if "WAVELENGTH" in self.metadata.columns:
                 wavelengths = []

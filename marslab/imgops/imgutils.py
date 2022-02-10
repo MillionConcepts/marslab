@@ -148,6 +148,14 @@ def std_clip(image, sigma=1):
     std = np.std(finite)
     return np.clip(finite, *(mean - std * sigma, mean + std * sigma)).data
 
+def centile_clip(image, centiles=(1, 99)):
+    """
+    simple clipping function that clips values above and below a given
+    percentile range
+    """
+    finite = np.ma.masked_invalid(image)
+    bounds = np.percentile(finite, centiles)
+    return np.clip(finite, *bounds).data
 
 def minmax_clip(image, stretch=(0, 0)):
     """

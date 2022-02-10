@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="marslab",
-    version="0.9.4",
+    version="0.9.5",
     url="https://github.com/millionconcepts/marslab.git",
     author="Million Concepts",
     author_email="chase@millionconcepts.com",

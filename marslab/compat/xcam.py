@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from itertools import chain, combinations, product
 from math import floor
 from statistics import mean
+from types import MappingProxyType
 from typing import Optional
 
 import numpy as np
@@ -387,6 +388,7 @@ def count_rois_on_xcam_images(
     instrument,
     pixel_map_dict=None,
     bayer_pixel_dict=None,
+    special_constants = tuple([0])
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -409,6 +411,9 @@ def count_rois_on_xcam_images(
 
     if bayer_pixel_dict is None:
         bayer_pixel_dict = BAND_TO_BAYER[instrument]
+    # don't attempt to apply Bayer masks if Bayer pixels are explicitly
+    # assigned as None. Permits overriding Bayer pixel selection for use cases
+    # like images that arrived at our pipeline already debayered.
     if not all([pixel is None for pixel in bayer_pixel_dict.values()]):
         bayer_masks = make_bayer(
             list(xcam_image_dict.values())[0].shape, RGGB_PATTERN
@@ -445,7 +450,7 @@ def count_rois_on_xcam_images(
                 detector_mask = np.logical_and(detector_mask, flag_mask)
         eye = "LEFT" if filter_name.upper().startswith("L") else "RIGHT"
         roi_counts = count_rois_on_image(
-            rois[eye].values(), rois[eye].keys(), image, detector_mask, [0]
+            rois[eye].values(), rois[eye].keys(), image, detector_mask, special_constants
         )
         for roi_name, counts in roi_counts.items():
             roi_listing.append(
@@ -532,3 +537,22 @@ def count_rois_on_xcam_images(
             base_df[filter_name] = np.nan
             base_df[filter_name + "_ERR"] = np.nan
     return base_df
+
+
+# standard translations between eye codes and names
+EYE_TERMS = MappingProxyType(
+    {"left": "L", "l": "left", "r": "right", "right": "R"}
+)
+
+# noinspection PyTypeChecker
+REVERSE_EYE_TERMS = MappingProxyType(
+    {k: v for k, v in zip(reversed(EYE_TERMS.keys()), EYE_TERMS.values())}
+)
+
+
+def eye_name(string, swap=False):
+    terms = EYE_TERMS if swap is False else REVERSE_EYE_TERMS
+    try:
+        return terms[string.lower()]
+    except KeyError:
+        raise ValueError("This axis only has left/L and right/R directions.")

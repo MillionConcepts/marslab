@@ -15,11 +15,12 @@ from marslab.imgops.loaders import pdr_load
 
 
 def parse_mcam_fn(mcam_fn):
+    filename = Path(mcam_fn).name
     return {
-        "EYE": mcam_fn[5],
-        "SEQ_ID": f"mcam{int(mcam_fn[6:12])}",
-        "CAL": mcam_fn[26:30],
-        "FILETYPE": mcam_fn[22:25],
+        "EYE": filename[5],
+        "SEQ_ID": f"mcam{int(filename[6:12])}",
+        "CAL": filename[26:30],
+        "FILETYPE": filename[22:25]
     }
 
 

@@ -6,7 +6,7 @@ import logging
 import os
 from collections.abc import Mapping, Callable, Collection, Sequence
 from pathlib import Path
-from typing import Optional, Union, MutableMapping
+from typing import Optional, Union, MutableMapping, Any
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
@@ -31,7 +31,6 @@ class BandSet:
     multispectral image products
     """
 
-    # TODO: do I need to allow more of these on init? like for copying? maybe?
     def __init__(
         self,
         metadata: pd.DataFrame = None,
@@ -41,6 +40,7 @@ class BandSet:
         name: str = None,
         threads: Mapping = None,
         raw: MutableMapping = None,
+        special_constants: Collection[Any] = None
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -91,6 +91,7 @@ class BandSet:
         self.counts = None
         self.threads = threads
         self.local_files = []
+        self.special_constants = special_constants
         if isinstance(metadata, pd.DataFrame):
             if "IX" not in metadata.columns:
                 metadata["IX"] = 0
@@ -102,6 +103,7 @@ class BandSet:
             from marslab.imgops.loaders import rasterio_load
 
             self.load_method = rasterio_load
+    # TODO: do I need to allow more of these on init? like for copying? maybe?
 
     def setup_pool(self, thread_type):
         if self.threads.get(thread_type) is not None:
@@ -322,7 +324,9 @@ class BandSet:
                 ).copy()
             # make processing pipeline fron instruction
             pipeline = Look.compile_from_instruction(
-                instruction, metadata=self.metadata
+                instruction,
+                metadata=self.metadata,
+                special_constants=self.special_constants
             )
             # all of cropper, pre, post, overlay can potentially be absent --
             # these are _possible_ steps in the pipeline. note that wavelengths
