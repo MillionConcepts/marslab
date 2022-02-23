@@ -226,7 +226,7 @@ def pil_load(
     return pil_load_shell(image, metadata, bands)
 
 
-# TODO:
+# TODO: is this necessary?
 def pil_load_rgb(
     path: Union[str, Path],
     metadata: Optional["pd.DataFrame"] = None,

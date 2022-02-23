@@ -204,7 +204,7 @@ def spectop_look(
     # return np.ma.MaskedArray(look, mask)
 
 
-# TODO: cruft, this should be handled by RGBset
+# TODO: cruft, this should be handled by BandSet -- but is it?
 def rgb_from_bayer(
     image,
     bayer_pattern,
@@ -330,3 +330,30 @@ def simple_figure(image: Union[ArrayLike, Image.Image]) -> mpl.figure.Figure:
     ax.imshow(image)
     strip_axes(ax)
     return fig
+
+
+def render_nested_rgb_composite(
+    channel_images,
+    *,
+    metadata,
+    special_constants=None,
+    **channel_instructions,
+):
+    # TODO: is there a cleaner way to handle this import?
+    from marslab.imgops.look import Look
+    rendered_channels = {}
+    for channel, instruction in channel_instructions.items():
+        if "params" in instruction.keys():
+            instruction["params"]["special_constants"] = special_constants
+        else:
+            instruction["params"] = {"special_constants": special_constants}
+        pipeline = Look.compile_from_instruction(instruction, metadata)
+        rendered_channels[channel] = pipeline.execute(channel_images[channel])
+    norm_channels = [
+        normalize_range(rendered_channels[name])
+        for name in ("red", "green", "blue")
+    ]
+    return render_rgb_composite(
+        norm_channels,
+        special_constants=special_constants
+    )

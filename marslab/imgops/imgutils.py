@@ -4,15 +4,18 @@ image processing utility functions
 import gc
 import sys
 from functools import partial
+from itertools import chain
 from typing import (
     Callable,
     Sequence,
     MutableMapping,
     Collection,
+    Mapping,
 )
 from typing import Union
 
 import numpy as np
+from dustgoggles.structures import dig_for_values
 from numpy.ma import MaskedArray
 
 
@@ -53,12 +56,17 @@ def crop(array: np.ndarray, bounds=None, **_) -> np.ndarray:
 
 def crop_all(
     arrays: Collection[np.ndarray], bounds=None, **_
-) -> Union[list[np.ndarray], np.ndarray]:
+) -> Union[Mapping[str, list[np.ndarray]], list[np.ndarray], np.ndarray]:
     """applies crop() to every array in the passed collection"""
     # if you _didn't_ pass it a collection, just overload / dispatch to crop()
     if isinstance(arrays, np.ndarray):
         return crop(arrays, bounds)
     # otherwise map crop()
+    elif isinstance(arrays, Mapping):
+        return {
+            name: [crop(array, bounds) for array in name_arrays]
+            for name, name_arrays in arrays.items()
+        }
     return [crop(array, bounds) for array in arrays]
 
 
@@ -140,8 +148,15 @@ def std_clip(image, sigma=1):
     std = np.std(finite)
     return np.clip(finite, *(mean - std * sigma, mean + std * sigma)).data
 
+def centile_clip(image, centiles=(1, 99)):
+    """
+    simple clipping function that clips values above and below a given
+    percentile range
+    """
+    finite = np.ma.masked_invalid(image)
+    bounds = np.percentile(finite, centiles)
+    return np.clip(finite, *bounds).data
 
-# TODO: is this cruft?
 def minmax_clip(image, stretch=(0, 0)):
     """
     simple minmax clip that optionally cheats 0 up and 1 down at multiples
@@ -159,6 +174,9 @@ def minmax_clip(image, stretch=(0, 0)):
     )
 
 
+# TODO: would it be better for these functions to use flat mask arrays
+#  rather than coordinate grids? (performance is the same, question is
+#  interface convenience)
 def bilinear_interpolate(
     input_array: np.ndarray,
     output_shape: tuple[int, int],
@@ -166,10 +184,6 @@ def bilinear_interpolate(
     x_coords: np.ndarray,
 ) -> np.ndarray:
     """
-    TODO: would it be better for these functions to use flat mask arrays
-        rather than coordinate grids? (performance is the same, question is
-        interface convenience
-
     upsample a 2D array, gridding its pixels at y-coordinates given in y_coords
     and x-coordinates given in x_coords and linearly interpolating from there,
     first in the x direction and then in the y direction. y_coords and x_coords
@@ -251,7 +265,8 @@ def apply_image_filter(image, image_filter=None):
 def mapfilter(predicate, key, map_sequence):
     new_sequence = []
     for mapping in map_sequence:
-        if predicate(mapping.get(key)):
+        obj = mapping if key is None else mapping.get(key)
+        if predicate(obj):
             new_sequence.append(mapping)
     return new_sequence
 
@@ -271,3 +286,19 @@ def make_mask_passer(func, mask_nans=True):
         return transformed
 
     return mask_passer
+
+
+def get_all_bands(instruction: Mapping):
+    """
+    helper function for look set analysis: get all bands mentioned in an
+    instructions, including an instructions with nested bands
+    """
+    return chain.from_iterable(dig_for_values(instruction, "bands"))
+
+
+def get_all_bands_from_all(instructions: Collection[Mapping]):
+    """
+    helper function for look set analysis: get all bands mentioned in all
+    instructions, including from instructions with nested bands
+    """
+    return set(chain.from_iterable(map(get_all_bands, instructions)))

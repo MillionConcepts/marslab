@@ -1,6 +1,7 @@
 """
 functions for handling the MERtools .sel format
 """
+import zlib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Union
@@ -26,6 +27,11 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
                 "lseltemp",
                 "rseltemp",
                 "region_info",
+                "left_pos",
+                "right_pos",
+                "sel_file_format_major_version",
+                "sel_file_format_minor_version",
+                "sel_file_format_date"
             }
         )
         return True
