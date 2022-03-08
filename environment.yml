@@ -16,7 +16,6 @@ dependencies:
   - pvl
   - python-Levenshtein
   - scipy
-  - scikit-image
   - opencv
   - fs
   - pathos

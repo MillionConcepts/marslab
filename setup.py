@@ -24,7 +24,6 @@ setup(
         "jupyter",
         "astropy",
         "fs",
-        "scikit-image",
         "sympy",
         "clize",
         "pandas",
