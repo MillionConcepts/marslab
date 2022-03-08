@@ -18,21 +18,19 @@ setup(
         "numpy",
         "scipy",
         "dustgoggles",
-        "pillow",
-        "astropy",
         "fs",
-        "sympy",
         "clize",
         "pandas",
         "more-itertools",
         "pathos",
         "cytoolz",
-        "python-dateutil"
     ],
     extras_require={
         "pdr_load": ["rasterio"],
         "tests": ["pytest", "hypothesis"],
         "render": ["pillow", "matplotlib"],
-        "notebooks": ["jupyter"]
+        "notebooks": ["jupyter"],
+        "regions": ["astropy"],
+        "time": ["sympy", "python-dateutil"]
     }
 )
