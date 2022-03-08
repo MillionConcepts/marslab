@@ -5,7 +5,7 @@ instruments (PCAM, MCAM, ZCAM...), affording consistent interpretation
 of operations on individual spectra
 """
 from collections.abc import Mapping, Sequence
-from itertools import chain, combinations, product
+from itertools import chain, combinations
 from math import floor
 from statistics import mean
 from types import MappingProxyType
@@ -16,17 +16,16 @@ import pandas.api.types
 import pandas as pd
 from more_itertools import windowed
 
-from marslab.imgops.regions import roi_position
 
 WAVELENGTH_TO_FILTER = {
     "CCAM": {
-        400: '400',
-        440: '440',
-        535: '535',
-        600: '600',
-        670: '670',
-        750: '750',
-        840: '840'
+        400: "400",
+        440: "440",
+        535: "535",
+        600: "600",
+        670: "670",
+        750: "750",
+        840: "840",
     },
     "ZCAM": {
         "L": {
@@ -98,10 +97,12 @@ def make_xcam_filter_dict(abbreviation):
     form filter: wavelength dictionary for mastcam-family instruments
     """
     if abbreviation == "CCAM":
-        return { name: wavelength
-                 for wavelength, name in sorted(
-                    WAVELENGTH_TO_FILTER[abbreviation].items(), key=lambda item: item[1]
-                )
+        return {
+            name: wavelength
+            for wavelength, name in sorted(
+                WAVELENGTH_TO_FILTER[abbreviation].items(),
+                key=lambda item: item[1],
+            )
         }
     left = {
         name: wavelength
@@ -403,7 +404,7 @@ def count_rois_on_xcam_images(
     instrument,
     pixel_map_dict=None,
     bayer_pixel_dict=None,
-    special_constants = tuple([0])
+    special_constants=tuple([0]),
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -415,7 +416,11 @@ def count_rois_on_xcam_images(
 
     """
     from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
-    from marslab.imgops.regions import count_rois_on_image, roi_stats
+    from marslab.imgops.regions import (
+        count_rois_on_image,
+        roi_stats,
+        roi_position,
+    )
 
     # unrolling for easier iteration
     roi_hdus = [roi_hdulist[hdu_ix] for hdu_ix in roi_hdulist]
@@ -465,7 +470,11 @@ def count_rois_on_xcam_images(
                 detector_mask = np.logical_and(detector_mask, flag_mask)
         eye = "LEFT" if filter_name.upper().startswith("L") else "RIGHT"
         roi_counts = count_rois_on_image(
-            rois[eye].values(), rois[eye].keys(), image, detector_mask, special_constants
+            rois[eye].values(),
+            rois[eye].keys(),
+            image,
+            detector_mask,
+            special_constants,
         )
         for roi_name, counts in roi_counts.items():
             roi_listing.append(
@@ -536,7 +545,8 @@ def count_rois_on_xcam_images(
         existing = row.dropna()
         for measure in measures:
             oculars = [
-                ocular for ocular in (f"LEFT_{measure}", f"RIGHT_{measure}")
+                ocular
+                for ocular in (f"LEFT_{measure}", f"RIGHT_{measure}")
                 if ocular in existing.index
             ]
             base_df.loc[ix, measure] = np.mean(
