@@ -16,12 +16,9 @@ setup(
     python_requires=">=3.9",
     install_requires=[
         "numpy",
-        "matplotlib",
         "scipy",
-        "pdr",
         "dustgoggles",
         "pillow",
-        "jupyter",
         "astropy",
         "fs",
         "sympy",
@@ -30,10 +27,12 @@ setup(
         "more-itertools",
         "pathos",
         "cytoolz",
-        "rasterio",
-        "pathos",
-        "hypothesis",
-        "pytest",
         "python-dateutil"
     ],
+    extras_require={
+        "pdr_load": ["rasterio"],
+        "tests": ["pytest", "hypothesis"],
+        "render": ["pillow", "matplotlib"],
+        "notebooks": ["jupyter"]
+    }
 )
