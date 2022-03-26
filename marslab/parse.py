@@ -612,6 +612,6 @@ def parse(fn):
 
 
 class Parse:
-    def __init__(self, fn):
+    def __call__(self, fn):
         # TODO: A decision tree between missions. Right now, everything is M2020.
         return parse(fn)
