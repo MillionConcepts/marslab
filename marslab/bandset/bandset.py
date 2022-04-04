@@ -12,7 +12,6 @@ from typing import Optional, Union, MutableMapping, Any
 # performs pickling magick at import.
 
 from cytoolz.dicttoolz import merge
-from pathos.multiprocessing import ProcessPool
 import numpy as np
 import pandas as pd
 
@@ -23,6 +22,14 @@ from marslab.imgops.look import Look, save_plainly
 from marslab.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
+
+
+def unpack_results(
+    results: Union[tuple[list[dict], list[dict]], list[dict]]
+) -> tuple[dict, dict]:
+    return tuple(
+        [merge([result[ix] for result in results]) for ix in (0, 1)]
+    )
 
 
 class BandSet:
@@ -90,6 +97,9 @@ class BandSet:
         self.name = name
         self.counts = None
         self.threads = threads
+        # optional cache of metadata generated during band-loading process.
+        #  loaders may return or not return this metadata.
+        self.load_metadata = {}
         self.local_files = []
         self.special_constants = special_constants
         if isinstance(metadata, pd.DataFrame):
@@ -106,6 +116,8 @@ class BandSet:
     # TODO: do I need to allow more of these on init? like for copying? maybe?
 
     def setup_pool(self, thread_type):
+        from pathos.multiprocessing import ProcessPool
+
         if self.threads.get(thread_type) is not None:
             log.info("... initializing worker pool ...")
             pool = ProcessPool(self.threads.get(thread_type))
@@ -146,7 +158,9 @@ class BandSet:
                     self.load_method, path, band_df, bands
                 )
             results = wait_for_it(pool, results, log)
-        self.raw |= merge(results)
+        arrays, load_metadata = unpack_results(results)
+        self.raw |= arrays
+        self.load_metadata |= load_metadata
 
     def make_db_masks(self, shape: Sequence[int, int] = None, remake=False):
         if self.bayer_info is None:
@@ -378,6 +392,8 @@ class BandSet:
         results = {}
         # TODO: dispatch these cases
         if threads is not None:
+            from pathos.multiprocessing import ProcessPool
+
             log.info("... initializing worker pool ...")
             pool = ProcessPool(threads)
             pool.restart()

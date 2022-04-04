@@ -3,7 +3,9 @@ generic image-loading functions for multispectral ops
 """
 import sys
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING, Union, Callable, Sequence
+from typing import (
+    Optional, TYPE_CHECKING, Union, Callable, Sequence, Collection
+)
 
 import numpy as np
 
@@ -114,7 +116,7 @@ def rasterio_load(
     bands: Optional[Sequence[Union[str, int]]] = None,
     do_scale=True,
     **scale_kwargs
-):
+) -> tuple[dict[Union[int, str], np.ndarray], dict]:
     """
     simple rasterio-based image loading function that reads an image in and
     scales it if applicable
@@ -134,64 +136,7 @@ def rasterio_load(
             reader.read(int(record["IX"] + 1)),
             record["IX"],
         )
-    return band_arrays
-
-
-def pdr_scaler(
-    _,
-    preserve_constants: Sequence[float] = None,
-    float_dtype=np.float32,
-) -> Callable[["pdr.Data", int], np.ndarray]:
-    """
-    make a scaling function for a particular DatasetReader object
-    """
-
-    def scaler(data: pdr.Data, band_ix: int) -> np.ndarray:
-        image = data.IMAGE
-        if len(image.shape) == 3:
-            image = image[band_ix].copy()
-        else:
-            image = image.copy()
-        if data is None:
-            return image
-        if "LABEL" not in data.keys():
-            return image
-        if "SCALING_FACTOR" not in data.LABEL["IMAGE"].keys():
-            return image
-        # leaving special constants as they are
-        scale = data.LABEL["IMAGE"]["SCALING_FACTOR"]
-        offset = data.LABEL["IMAGE"]["OFFSET"]
-        return cast_scale(
-            data.IMAGE, scale, offset, preserve_constants, float_dtype
-        )
-
-    return scaler
-
-
-def pdr_load(
-    path: str,
-    metadata: Optional["pd.DataFrame"] = None,
-    bands: Optional[Sequence[Union[str, int]]] = None,
-    do_scale=True,
-    **scale_kwargs
-):
-    """
-    simple pdr-based image loading function that reads an image in and
-    scales it if requested and applicable
-    """
-    import pdr
-
-    data = pdr.read(path)
-    scaler_factory = pdr_scaler
-    scaler, metadata, bands = prep_scaled_loader(
-        metadata, bands, data.IMAGE, scaler_factory, do_scale, **scale_kwargs
-    )
-    band_arrays = {}
-    for record in metadata:
-        if record["BAND"] not in bands:
-            continue
-        band_arrays[record["BAND"]] = scaler(data, record["IX"])
-    return band_arrays
+    return band_arrays, {}
 
 
 def pil_load_shell(
@@ -219,20 +164,84 @@ def pil_load(
     path: str,
     metadata: Optional["pd.DataFrame"] = None,
     bands: Optional[Sequence[Union[str, int]]] = None,
-):
+) -> tuple[dict[Union[int, str], np.ndarray], dict]:
     from PIL import Image
 
     image = Image.open(path)
-    return pil_load_shell(image, metadata, bands)
+    return pil_load_shell(image, metadata, bands), {}
 
 
 # TODO: is this necessary?
 def pil_load_rgb(
     path: Union[str, Path],
     metadata: Optional["pd.DataFrame"] = None,
-):
+) -> tuple[dict[Union[int, str], np.ndarray], {}]:
     from PIL import Image
 
     image = Image.open(path)
     image.convert("RGB")
-    return pil_load_shell(image, metadata, ("R", "G", "B"))
+    return pil_load_shell(image, metadata, ("R", "G", "B")), {}
+
+
+def pdr_load(
+    target: Union[str, "pdr.Data"],
+    metadata: Collection = (),
+    bands: Sequence[Union[str, int]] = (),
+    do_scale=True,
+    object_name="IMAGE",
+    preserve_constants=None,
+    float_dtype=np.float32,
+    **_scale_kwargs
+) -> tuple[
+    dict[Union[int, str], np.ndarray], dict[Union[int, str], "pdr.Metadata"]
+]:
+    """
+    simple pdr-based image loading function. reads an image; scales it using
+    pdr's internal scaling functions if requested and applicable.
+
+    target: either a fully-specified path to a local file or an
+    already-initialized pdr.Data object
+    metadata: metadata about bands that might be loaded from the file
+    bands: names of bands to be loaded from the file
+    do_scale: scale the image based on label metadata?
+    object_name: name of the object, must be the same as its name in
+     the pdr.Data object's index
+    """
+    import pdr
+
+    if isinstance(target, pdr.Data):
+        data = target
+    else:
+        data = pdr.read(target)
+    image = manage_pdr_scaling(
+        data, float_dtype, object_name, preserve_constants, do_scale
+    )
+    bands, metadata = unpack_pd_bands(bands, metadata)
+    band_arrays, image_metadata = {}, {}
+    for record in metadata:
+        if record["BAND"] not in bands:
+            continue
+        if len(image.shape) > 2:
+            band_arrays[record["BAND"]] = image[record["IX"]]
+            image_metadata[record["BAND"]] = data.metadata
+        else:
+            band_arrays[record["BAND"]] = image
+    return band_arrays, image_metadata
+
+
+def manage_pdr_scaling(
+    data: "pdr.Data",
+    float_dtype: type,
+    object_name: str,
+    preserve_constants: Optional[Sequence[float]],
+    do_scale: bool
+) -> np.ndarray:
+    if do_scale is False:
+        return data[object_name]
+    if preserve_constants is None:
+        data.find_special_constants(object_name)
+    else:
+        data.specials[object_name] = preserve_constants
+    if data[object_name].dtype.char in np.typecodes["AllInteger"]:
+        data[object_name] = data[object_name].astype(float_dtype)
+    return data.get_scaled(object_name, inplace=True)
