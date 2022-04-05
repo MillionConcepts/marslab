@@ -23,15 +23,6 @@ from marslab.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
 
-
-def unpack_results(
-    results: Union[tuple[list[dict], list[dict]], list[dict]]
-) -> tuple[dict, dict]:
-    return tuple(
-        [merge([result[ix] for result in results]) for ix in (0, 1)]
-    )
-
-
 class BandSet:
     """
     class for organizing and performing bulk rendering operations on
@@ -97,9 +88,9 @@ class BandSet:
         self.name = name
         self.counts = None
         self.threads = threads
-        # optional cache of metadata generated during band-loading process.
-        #  loaders may return or not return this metadata.
-        self.load_metadata = {}
+        # optional cache of auxiliary objects. loaders can use this when
+        # complex metadata have been pre-parsed, etc..
+        self.precached = {}
         self.local_files = []
         self.special_constants = special_constants
         if isinstance(metadata, pd.DataFrame):
@@ -148,7 +139,8 @@ class BandSet:
         if pool is None:
             results = []
             for path, band_df in chunked_by_file:
-                results.append(self.load_method(path, band_df, bands))
+                results.append(
+                    self.load_method(path, band_df, bands, self.precached))
                 log.info("loaded " + path)
         else:
             results = {}
@@ -158,9 +150,7 @@ class BandSet:
                     self.load_method, path, band_df, bands
                 )
             results = wait_for_it(pool, results, log)
-        arrays, load_metadata = unpack_results(results)
-        self.raw |= arrays
-        self.load_metadata |= load_metadata
+        self.raw |= merge(results)
 
     def make_db_masks(self, shape: Sequence[int, int] = None, remake=False):
         if self.bayer_info is None:

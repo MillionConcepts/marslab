@@ -1,7 +1,6 @@
 """
 functions for handling the MERtools .sel format
 """
-import zlib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Union

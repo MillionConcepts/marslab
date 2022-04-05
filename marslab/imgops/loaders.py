@@ -4,9 +4,10 @@ generic image-loading functions for multispectral ops
 import sys
 from pathlib import Path
 from typing import (
-    Optional, TYPE_CHECKING, Union, Callable, Sequence, Collection
+    Optional, TYPE_CHECKING, Union, Callable, Sequence, Collection, Mapping
 )
 
+from dustgoggles.structures import enumerate_as_mapping
 import numpy as np
 
 if TYPE_CHECKING:
@@ -114,9 +115,10 @@ def rasterio_load(
     path: str,
     metadata: Optional["pd.DataFrame"] = None,
     bands: Optional[Sequence[Union[str, int]]] = None,
+    _precached=None,
     do_scale=True,
     **scale_kwargs
-) -> tuple[dict[Union[int, str], np.ndarray], dict]:
+) -> dict[Union[int, str], np.ndarray]:
     """
     simple rasterio-based image loading function that reads an image in and
     scales it if applicable
@@ -136,7 +138,7 @@ def rasterio_load(
             reader.read(int(record["IX"] + 1)),
             record["IX"],
         )
-    return band_arrays, {}
+    return band_arrays
 
 
 def pil_load_shell(
@@ -164,37 +166,39 @@ def pil_load(
     path: str,
     metadata: Optional["pd.DataFrame"] = None,
     bands: Optional[Sequence[Union[str, int]]] = None,
-) -> tuple[dict[Union[int, str], np.ndarray], dict]:
+    _precached=None
+) -> dict[Union[int, str], np.ndarray]:
     from PIL import Image
 
     image = Image.open(path)
-    return pil_load_shell(image, metadata, bands), {}
+    return pil_load_shell(image, metadata, bands)
 
 
 # TODO: is this necessary?
 def pil_load_rgb(
     path: Union[str, Path],
     metadata: Optional["pd.DataFrame"] = None,
-) -> tuple[dict[Union[int, str], np.ndarray], {}]:
+    _bands=None,
+    _precached=None
+) -> dict[Union[int, str], np.ndarray]:
     from PIL import Image
 
     image = Image.open(path)
     image.convert("RGB")
-    return pil_load_shell(image, metadata, ("R", "G", "B")), {}
+    return pil_load_shell(image, metadata, ("R", "G", "B"))
 
 
 def pdr_load(
     target: Union[str, "pdr.Data"],
     metadata: Collection = (),
     bands: Sequence[Union[str, int]] = (),
+    precached: Optional[Mapping[str, "pdr.Data"]] = None,
     do_scale=True,
     object_name="IMAGE",
     preserve_constants=None,
     float_dtype=np.float32,
     **_scale_kwargs
-) -> tuple[
-    dict[Union[int, str], np.ndarray], dict[Union[int, str], "pdr.Metadata"]
-]:
+) -> dict[Union[int, str], np.ndarray]:
     """
     simple pdr-based image loading function. reads an image; scales it using
     pdr's internal scaling functions if requested and applicable.
@@ -209,24 +213,30 @@ def pdr_load(
     """
     import pdr
 
+    data = None
+    # did we directly pass a pdr.Data object? great
     if isinstance(target, pdr.Data):
         data = target
-    else:
+    # did we cache some pdr.Data objects? also great
+    elif precached:
+        if target in precached.keys():
+            data = precached[target]
+    # otherwise initialize pdr.Data object, treating target as a path
+    if data is None:
         data = pdr.read(target)
     image = manage_pdr_scaling(
         data, float_dtype, object_name, preserve_constants, do_scale
     )
     bands, metadata = unpack_pd_bands(bands, metadata)
-    band_arrays, image_metadata = {}, {}
+    band_arrays = {}
     for record in metadata:
         if record["BAND"] not in bands:
             continue
         if len(image.shape) > 2:
             band_arrays[record["BAND"]] = image[record["IX"]]
-            image_metadata[record["BAND"]] = data.metadata
         else:
             band_arrays[record["BAND"]] = image
-    return band_arrays, image_metadata
+    return band_arrays
 
 
 def manage_pdr_scaling(
@@ -241,7 +251,5 @@ def manage_pdr_scaling(
     if preserve_constants is None:
         data.find_special_constants(object_name)
     else:
-        data.specials[object_name] = preserve_constants
-    if data[object_name].dtype.char in np.typecodes["AllInteger"]:
-        data[object_name] = data[object_name].astype(float_dtype)
-    return data.get_scaled(object_name, inplace=True)
+        data.specials[object_name] = enumerate_as_mapping(preserve_constants)
+    return data.get_scaled(object_name, inplace=True, float_dtype=float_dtype)
