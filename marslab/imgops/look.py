@@ -8,18 +8,10 @@ from inspect import signature
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Collection, Any
 
-import matplotlib.figure
 from dustgoggles.composition import Composition
 
 import marslab.spectops
 from marslab.imgops.imgutils import map_filter, crop_all
-from marslab.imgops.render import (
-    render_overlay,
-    spectop_look,
-    render_rgb_composite,
-    decorrelation_stretch,
-    render_nested_rgb_composite,
-)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -27,14 +19,18 @@ if TYPE_CHECKING:
 
 
 def look_to_function(look: str) -> Callable:
+    from marslab.imgops import render
+    
     if look in marslab.spectops.SPECTOP_NAMES:
-        return partial(spectop_look, spectop=getattr(marslab.spectops, look))
+        return partial(
+            render.spectop_look, spectop=getattr(marslab.spectops, look)
+        )
     elif look in ("enhanced color", "true color", "composite"):
-        return render_rgb_composite
+        return render.render_rgb_composite
     elif look == "dcs":
-        return decorrelation_stretch
+        return render.decorrelation_stretch
     elif look == "nested_composite":
-        return render_nested_rgb_composite
+        return render.render_nested_rgb_composite
     else:
         raise ValueError("unknown look operation " + look)
 
@@ -72,6 +68,7 @@ def interpret_prefilter_step(chunk):
 
 
 def interpret_overlay_step(chunk):
+    from marslab.imgops.render import render_overlay
     return render_overlay, chunk.get("params", {})
 
 
@@ -200,7 +197,9 @@ class Look(Composition, ABC):
 
 
 def save_plainly(look, filename, outpath, dpi=275):
-    if isinstance(look, matplotlib.figure.Figure):
+    from matplotlib.figure import Figure
+
+    if isinstance(look, Figure):
         for ix, axis in enumerate(look.axes):
             if ix > 0:
                 axis.remove()
