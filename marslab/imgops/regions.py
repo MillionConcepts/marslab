@@ -21,19 +21,22 @@ def roi_position(roi):
         "theta": np.arctan2(y, x)
     }
 
-
 def roi_stats(array, extended=True):
-    base = {"mean": array.mean(), "err": array.std(), "values": array.ravel()}
+    if isinstance(array, np.ma.MaskedArray):
+        vals = array.compressed()
+    else:
+        vals = array.ravel()
+    base = {"mean": vals.mean(), "err": vals.std(), "values": vals}
     if extended:
         base |= {
-            "min": array.min(),
-            "max": array.max(),
-            "total": array.sum(),
-            "count": array.size,
-            "skew": skew(array),
-            "kurtosis": kurtosis(array),
-            "mode": mode(array),
-            "median": np.median(array),
+            "min": vals.min(),
+            "max": vals.max(),
+            "total": vals.sum(),
+            "count": vals.size,
+            "skew": skew(vals),
+            "kurtosis": kurtosis(vals),
+            "mode": mode(vals),
+            "median": np.ma.median(vals),
         }
     return base
 

@@ -180,7 +180,7 @@ class Look(Composition, ABC):
     def populate_kwargs(self):
         for step in self.steps:
             params = signature(self.steps[step]).parameters.values()
-            param_names  = [param.name for param in params]
+            param_names = [param.name for param in params]
             for thing in ("special_constants", "metadata"):
                 if (hasattr(self, thing)) and (thing in param_names):
                     self.add_kwargs(step, **{thing: getattr(self, thing)})

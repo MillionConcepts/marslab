@@ -351,6 +351,10 @@ class BandSet:
         self.looks |= look_cache
 
     def purge(self, what: Optional[str] = None) -> None:
+        if what == "precached_images":
+            for data in self.precached.values():
+                del data.IMAGE
+            return
         if what is None:
             for cache_name in self.cache_names:
                 absolutely_destroy(getattr(self, cache_name))
