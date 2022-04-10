@@ -98,36 +98,92 @@ def map_filter(filter_function: Callable) -> Callable:
     return mapped_filter
 
 
+def find_masked_bounds(image, cheat_low, cheat_high):
+    """
+    relatively memory-efficient way to perform bound calculations for
+    normalize_range on a masked array.
+    """
+    valid = image[~image.mask].data
+    if valid.size == 0:
+        return None, None
+    if (cheat_low != 0) and (cheat_high != 0):
+        minimum, maximum = np.percentile(
+            valid, [cheat_low, 100 - cheat_high], overwrite_input=True
+        ).astype(image.dtype)
+    elif cheat_low != 0:
+        maximum = valid.max()
+        minimum = np.percentile(valid, cheat_low, overwrite_input=True).astype(
+            image.dtype
+        )
+    elif cheat_high != 0:
+        minimum = valid.min()
+        maximum = np.percentile(
+            valid, 100 - cheat_high, overwrite_input=True
+        ).astype(image.dtype)
+    else:
+        minimum = valid.min()
+        maximum = valid.max()
+    return minimum, maximum
+
+
 # noinspection PyArgumentList
+def find_unmasked_bounds(image, cheat_low, cheat_high):
+    """straightforward way to find unmasked array bounds for normalize_range"""
+    if cheat_low != 0:
+        minimum = np.percentile(image, cheat_low).astype(image.dtype)
+    else:
+        minimum = image.min()
+    if cheat_high != 0:
+        maximum = np.percentile(image, 100 - cheat_high).astype(image.dtype)
+    else:
+        maximum = image.max()
+    return minimum, maximum
+
+
 def normalize_range(
     image: np.ndarray,
     bounds: Sequence[int] = (0, 1),
-    stretch: Union[float, Sequence[float]] = None,
+    stretch: Union[float, tuple[float, float]] = 0,
+    inplace: bool = False,
 ) -> np.ndarray:
     """
-    simple linear min-max scaler that optionally cuts off low and high
-
-    percentiles of the input
+    simple linear min-max scaler that optionally percentile-clips the input at
+    stretch = (low_percentile, 100 - high_percentile). if inplace is True,
+    may transform the original array, with attendant memory savings and
+    destructive effects.
     """
-    working_image = image.copy()
     if isinstance(stretch, Sequence):
         cheat_low, cheat_high = stretch
     else:
         cheat_low, cheat_high = (stretch, stretch)
     range_min, range_max = bounds
-    if cheat_low is not None:
-        minimum = np.percentile(image, cheat_low).astype(image.dtype)
+    if isinstance(image, np.ma.MaskedArray):
+        minimum, maximum = find_masked_bounds(image, cheat_low, cheat_high)
+        if minimum is None:
+            return image
     else:
-        minimum = image.min()
-    if cheat_high is not None:
-        maximum = np.percentile(image, 100 - cheat_high).astype(image.dtype)
-    else:
-        maximum = image.max()
+        minimum, maximum = find_unmasked_bounds(image, cheat_low, cheat_high)
     if not ((cheat_high is None) and (cheat_low is None)):
-        working_image = np.clip(working_image, minimum, maximum)
-    return range_min + (working_image - minimum) * (range_max - range_min) / (
+        if inplace is True:
+            image = np.clip(image, minimum, maximum, out=image)
+        else:
+            image = np.clip(image, minimum, maximum)
+    if inplace is True:
+        # perform the operation in-place
+        image -= minimum
+        image *= (range_max - range_min)
+        if image.dtype.char in np.typecodes['AllInteger']:
+            # this loss of precision is probably better than
+            # automatically typecasting it.
+            # TODO: detect rollover cases, etc.
+            image //= (maximum - minimum)
+        else:
+            image /= (maximum - minimum)
+        image += range_min
+        return image
+    return (image - minimum) * (range_max - range_min) / (
         maximum - minimum
-    )
+    ) + range_min
 
 
 def enhance_color(image: np.ndarray, bounds, stretch):

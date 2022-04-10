@@ -7,7 +7,6 @@ from itertools import repeat
 from functools import reduce
 from typing import Union, Optional, Sequence, Collection
 
-
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 import matplotlib as mpl
 import matplotlib.cm as cm
