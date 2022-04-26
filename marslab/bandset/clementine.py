@@ -10,7 +10,7 @@ from marslab.compat.clementine import (
     MOSAIC_SPECIAL_CONSTANTS,
 )
 from marslab.bandset.bandset import BandSet
-from marslab.imgops.loaders import rasterio_load
+from marslab.imgops.loaders import pdr_load
 
 
 def setup_clem_bandset_metadata(mosaic_file_path):
@@ -33,9 +33,7 @@ class ClemBandSet(BandSet):
 
     def __init__(self, tile_path, rois=None, threads=None):
         metadata = setup_clem_bandset_metadata(tile_path)
-        load_method = partial(
-            rasterio_load, preserve_constants=MOSAIC_SPECIAL_CONSTANTS
-        )
+        load_method = pdr_load
         super().__init__(
             metadata=metadata,
             load_method=load_method,

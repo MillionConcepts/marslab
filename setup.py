@@ -26,11 +26,12 @@ setup(
         "cytoolz",
     ],
     extras_require={
-        "pdr_load": ["rasterio"],
+        "pdr_load": ["pdr"],
         "tests": ["pytest", "hypothesis"],
         "render": ["pillow", "matplotlib"],
         "notebooks": ["jupyter"],
         "regions": ["astropy"],
-        "time": ["sympy", "python-dateutil"]
+        "time": ["sympy", "python-dateutil"],
+        "geom": ["pdr"]
     }
 )
