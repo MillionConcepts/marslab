@@ -1,4 +1,7 @@
 # marslab
+
+[![DOI](https://zenodo.org/badge/364688103.svg)](https://zenodo.org/badge/latestdoi/364688103)
+
 A library of Python utilities for working with observational data of Mars, 
 especially multispectral image data from rovers. This library does not contain 
 discrete user-facing applications; if you're looking for a clock, a plotter, or 
