@@ -1,27 +1,8 @@
 from collections import ChainMap
 
 import numpy as np
-from hypothesis import (
-    given,
-    strategies as st,
-    reject,
-    assume,
-    settings as hset,
-    Verbosity,
-)
-from hypothesis.errors import UnsatisfiedAssumption
-from hypothesis.extra.numpy import (
-    arrays,
-    scalar_dtypes,
-    array_shapes,
-    integer_dtypes,
-    floating_dtypes,
-    from_dtype,
-)
-from hypothesis.strategies import integers
-from more_itertools import all_equal
-
-
+from hypothesis import given, strategies as st, assume
+from hypothesis.extra.numpy import arrays, array_shapes
 
 from marslab.imgops.render import decorrelation_stretch
 from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
