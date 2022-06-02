@@ -49,22 +49,27 @@ def test_decorrelation_stretch_1():
 
 
 @given(
-channels=st.lists(
-        arrays(
-            dtype=np.float32,
-            shape=st.shared(
-                array_shapes(min_dims=2, max_dims=2, min_side=4), key="hi"
+    channels=(
+        st.lists(
+            arrays(
+                dtype=np.float32,
+                shape=st.shared(
+                    array_shapes(
+                        min_dims=2, max_dims=2, min_side=4, max_side=20
+                    ),
+                    key="hi"
+                ),
+                elements={
+                    "allow_nan": False,
+                    "allow_infinity": False,
+                    "min_value": 0,
+                    "max_value": 256,
+                },
+                fill=st.nothing(),
             ),
-            elements={
-                "allow_nan": False,
-                "allow_infinity": False,
-                "min_value": 0,
-                "max_value": 256,
-            },
-            fill=st.nothing(),
-        ),
-        min_size=2,
-    ),
+            min_size=2,
+        )
+    )
 )
 def test_decorrelation_stretch_2(channels):
     # single-valued arrays have undefined covariance

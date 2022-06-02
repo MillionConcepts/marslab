@@ -1,12 +1,5 @@
-name: ubuntu full env tests
-
-on:
-  push:
-    branches: "main"
-  pull_request:
-    branches: "*"
-  schedule:
-    - cron: "0 13 * * 1"
+name: tests
+on: workflow_dispatch
 
 jobs:
   build:
