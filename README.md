@@ -2,6 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/364688103.svg)](https://zenodo.org/badge/latestdoi/364688103) 
 [![tests](https://github.com/MillionConcepts/marslab/actions/workflows/tests_ubuntu.yml/badge.svg)](https://github.com/MillionConcepts/marslab/actions/workflows/tests_ubuntu.yml)
+[![codecov](https://codecov.io/gh/MillionConcepts/marslab/branch/main/graph/badge.svg?token=TQ5T3ZQB45)](https://codecov.io/gh/MillionConcepts/marslab)
 
 A library of Python utilities for working with observational data of Mars, 
 especially multispectral image data from rovers. This library does not contain 
