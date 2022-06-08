@@ -14,6 +14,7 @@ from typing import Optional
 import numpy as np
 import pandas.api.types
 import pandas as pd
+from dustgoggles.pivot import split_on
 from dustgoggles.structures import listify, enumerate_as_mapping
 from more_itertools import windowed
 
@@ -388,6 +389,19 @@ BAND_TO_BAYER = {
         "R0R": None,
     },
 }
+
+
+# TODO: de-vendor downstream (moved up to dustgoggles)
+def integerize(df):
+    for column in numeric_columns(df):
+        if pd.api.types.is_integer_dtype(df[column].dtype):
+            continue
+        isna, notna = split_on(df[column], df[column].isna())
+        if not (notna.round() == notna).all():
+            continue
+        df.loc[isna.index, column] = ""
+        df.loc[notna.index, column] = notna.map('{:.0f}'.format)
+    return df
 
 
 def numeric_columns(data: pd.DataFrame) -> list[str]:
