@@ -14,6 +14,7 @@ from typing import Optional
 import numpy as np
 import pandas.api.types
 import pandas as pd
+from dustgoggles.structures import listify, enumerate_as_mapping
 from more_itertools import windowed
 
 
@@ -581,3 +582,46 @@ def eye_name(string, swap=False):
         return terms[string.lower()]
     except KeyError:
         raise ValueError("This axis only has left/L and right/R directions.")
+
+
+def construct_field_ordering(filters, fields):
+    initial = (
+        "NAME",
+        "COLOR",
+        "ANALYSIS_NAME",
+        "SOL",
+        "SEQ_ID",
+        "FEATURE",
+        "DESCRIPTION",
+        "SITE",
+        "DRIVE",
+        "RSM",
+        "LTST",
+        "INCIDENCE_ANGLE",
+        "EMISSION_ANGLE",
+        "PHASE_ANGLE",
+        "SOLAR_ELEVATION",
+        "SOLAR_AZIMUTH",
+        "LAT",
+        "LON",
+        "ODOMETRY",
+        "ROVER_ELEVATION",
+        "TARGET_ELEVATION",
+        "INSTRUMENT",
+        "SCLK"
+    )
+    order = []
+    for predecessor in initial:
+        if predecessor in fields:
+            order.append(predecessor)
+    order += filters
+    stats = map(
+        lambda f: f.replace(f"{filters[0]}_", ""),
+        filter(lambda f: f.startswith(f"{filters[0]}_"), fields)
+    )
+    if "ERR" in stats:
+        stats = ["ERR"] + [s for s in stats if stats != "ERR"]
+    for stat in stats:
+        order += list(map(lambda s: f"{s}_{stat}", filters))
+    order += [f for f in fields if f not in order]
+    return order
