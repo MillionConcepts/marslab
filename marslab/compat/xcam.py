@@ -608,7 +608,8 @@ def construct_field_ordering(filters, fields):
         "ROVER_ELEVATION",
         "TARGET_ELEVATION",
         "INSTRUMENT",
-        "SCLK"
+        "SCLK",
+        "UNITS"
     )
     order = []
     for predecessor in initial:
