@@ -626,10 +626,9 @@ def construct_field_ordering(filters, fields):
         "UNITS"
     )
     order = []
-    for predecessor in initial:
+    for predecessor in initial + filters:
         if predecessor in fields:
             order.append(predecessor)
-    order += filters
     stats = map(
         lambda f: f.replace(f"{filters[0]}_", ""),
         filter(lambda f: f.startswith(f"{filters[0]}_"), fields)
