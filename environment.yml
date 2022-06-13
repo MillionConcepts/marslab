@@ -19,7 +19,7 @@ dependencies:
   - cytoolz
   - dustgoggles
   - python-dateutil
-  - git+https://github.com/MillionConcepts/pdr.git
+  - pdr
   - astropy
   - sympy
   - more-itertools
