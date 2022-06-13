@@ -630,8 +630,8 @@ def construct_field_ordering(filters, fields):
         if predecessor in fields:
             order.append(predecessor)
     stats = map(
-        lambda f: f.replace(f"{filters[0]}_", ""),
-        filter(lambda f: f.startswith(f"{filters[0]}_"), fields)
+        lambda f: str(f).replace(f"{filters[0]}_", ""),
+        filter(lambda f: str(f).startswith(f"{filters[0]}_"), fields)
     )
     if "ERR" in stats:
         stats = ["ERR"] + [s for s in stats if stats != "ERR"]
