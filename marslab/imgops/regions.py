@@ -21,6 +21,7 @@ def roi_position(roi):
         "theta": np.arctan2(y, x)
     }
 
+
 def roi_stats(array, extended=True):
     if isinstance(array, np.ma.MaskedArray):
         vals = array.compressed()

@@ -248,6 +248,10 @@ def manage_pdr_scaling(
 ) -> np.ndarray:
     if do_scale is False:
         return data[object_name]
+    # TODO: PDS4 clause will probably need to be cut and/or modified later
+    #  depending on pdr development exigencies
+    if getattr(data, "standard", None) == "PDS4":
+        return data.get_scaled(object_name)
     if preserve_constants is None:
         data.find_special_constants(object_name)
     else:

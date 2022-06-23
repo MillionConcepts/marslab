@@ -33,7 +33,7 @@ class ClemBandSet(BandSet):
 
     def __init__(self, tile_path, rois=None, threads=None):
         metadata = setup_clem_bandset_metadata(tile_path)
-        load_method = pdr_load
+        load_method = partial(pdr_load, object_name="image")
         super().__init__(
             metadata=metadata,
             load_method=load_method,
