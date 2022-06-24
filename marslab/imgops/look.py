@@ -114,6 +114,9 @@ class Look(Composition, ABC):
         if (self.metadata is not None) or (self.special_constants is not None):
             self.populate_kwargs()
 
+        # from marslab.imgops.imgutils import threshold_mask
+        # self.add_send("crop", partial(threshold_mask, percentiles=(5, 100)), "render", "threshold_mask")
+
     def _add_wavelengths(self, wavelengths: Sequence[float]):
         look = self.steps["look"]
         if "__name__" in dir(look):

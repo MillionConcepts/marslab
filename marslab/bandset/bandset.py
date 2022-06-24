@@ -301,6 +301,7 @@ class BandSet:
         pool = self.setup_pool("look")
         if pool is not None:
             log.info("... serializing arrays ...")
+        pipeline_cache = {}
         for instruction in available_instructions:
             # do we have a special name? TODO: make this more opinionated?
             op_name = instruction.get("name")
@@ -321,27 +322,27 @@ class BandSet:
                     ]
                     for channel in ("red", "green", "blue")
                 }
-            instruction_kwargs = {}
+            special_kwargs = {}
             if instruction.get("overlay") is not None:
-                instruction_kwargs["base_image"] = self.get_band(
+                special_kwargs["base_image"] = self.get_band(
                     instruction["overlay"]["band"]
                 ).copy()
-            # make processing pipeline fron instruction
+            # make processing pipeline from instruction
+            # all of cropper, pre, post, overlay can potentially be absent --
+            # these are _possible_ steps in the pipeline. note that wavelengths
+            # for spectops are added automagically by the Look compiler.
             pipeline = Look.compile_from_instruction(
                 instruction,
                 metadata=self.metadata,
                 special_constants=self.special_constants
             )
-            # all of cropper, pre, post, overlay can potentially be absent --
-            # these are _possible_ steps in the pipeline. note that wavelengths
-            # for spectops are added automagically by the Look compiler.
             if pool is not None:
                 look_cache[op_name] = pool.apipe(
-                    pipeline.execute, op_images, **instruction_kwargs
+                    pipeline.execute, op_images, **special_kwargs
                 )
             else:
                 look_cache[op_name] = pipeline.execute(
-                    op_images, **instruction_kwargs
+                    op_images, **special_kwargs
                 )
                 log.info("generated " + op_name)
         if pool is not None:

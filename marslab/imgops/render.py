@@ -18,9 +18,7 @@ from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import (
-    normalize_range,
-    eightbit,
-    enhance_color,
+    normalize_range, eightbit, enhance_color, threshold_mask
 )
 from marslab.imgops.pltutils import (
     set_colorbar_font,
@@ -35,6 +33,7 @@ def decorrelation_stretch(
     contrast_stretch: Optional[Union[Sequence[float], float]] = None,
     special_constants: Optional[Collection[float]] = None,
     sigma: Optional[float] = None,
+    threshold: Optional[tuple[float, float]] = None
 ):
     """
     decorrelation stretch of passed array on last axis of array. see
@@ -59,11 +58,15 @@ def decorrelation_stretch(
     decorrelation stretch)
     """
     working_array = np.dstack(channels)
-    # TODO: this is not a good general case solution, might need to use masked
-    #  arrays or some handrolled analog
     if special_constants is not None:
-        working_array = np.where(
-            np.isin(working_array, special_constants), 0, working_array
+        working_array = np.ma.masked_where(
+            np.isin(working_array, special_constants), working_array
+        )
+    else:
+        working_array = np.ma.masked_array(working_array)
+    if threshold is not None:
+        working_array.mask = np.logical_or(
+            working_array.mask, threshold_mask([working_array], threshold)
         )
     input_shape = working_array.shape
     channel_vectors = working_array.reshape(-1, input_shape[-1])
@@ -71,7 +74,7 @@ def decorrelation_stretch(
         working_dtype = np.float32
     else:
         working_dtype = channel_vectors.dtype
-    channel_covariance = np.cov(channel_vectors.T, dtype=working_dtype)
+    channel_covariance = np.ma.cov(channel_vectors.T).astype(working_dtype)
     # target per-channel standard deviation as a diagonalized matrix.
     # set equal to sigma if sigma is passed; otherwise simply set
     # equal to per-channel input standard deviation
@@ -154,6 +157,9 @@ def render_overlay(
     return fig
 
 
+# TODO: I think masking in this is too late and we should be doing it up
+#  front, adding an optional median fill step for cases where we might have
+#  undesirable white pixels everywhere or whatever.
 def render_rgb_composite(channels, *, special_constants=None):
     """
     render a composited image from three input channels. this is a good basis
@@ -166,9 +172,17 @@ def render_rgb_composite(channels, *, special_constants=None):
     arbitrary colormap (although aren't they all?).
     """
     assert len(channels) == 3
-    composed = np.dstack(channels)
-    if special_constants is not None:
-        composed = np.where(np.isin(composed, special_constants), 0, composed)
+    if isinstance(channels[0], np.ma.MaskedArray):
+        composed = np.ma.dstack(channels)
+    else:
+        composed = np.dstack(channels)
+    if special_constants is None:
+        return composed
+    special_mask = np.isin(composed, special_constants)
+    if isinstance(composed, np.ma.MaskedArray):
+        composed.mask = np.logical_or(composed.mask, special_mask)
+    else:
+        composed = np.ma.MaskedArray(composed, special_mask)
     return composed
 
 
@@ -178,29 +192,22 @@ def spectop_look(
     spectop=None,
     wavelengths=None,
     special_constants=None,
-    # smooth_nan=True,
+    threshold: Optional[tuple[float, float]] = None
 ):
-    # if all([isinstance(image, np.ma.MaskedArray) for image in images]):
-    #     mask = reduce(or_, [image.mask for image in images])
-    # else:
-    #     mask = np.full(images[0].shape, False)
-
-    look = spectop(images, None, wavelengths)[0]
-    # ignoring nans and special constants in scaling
-    # TODO: this is far too baroque
-    # mask[np.where(np.isnan(look))] = True
-    # mask[np.where(np.isinf(look))] = True
+    mask = np.full(images[0].shape, False, bool)
     if special_constants is not None:
         for image in images:
-            look[np.where(np.isin(image, special_constants))] = np.nan
-    # TODO: replace this horrible hack with an additional set
-    if np.any(np.isnan(look)):
-        kernel = Gaussian2DKernel(1, 1)
-        look = interpolate_replace_nans(look, kernel)
+            mask[np.nonzero(np.isin(image, special_constants))] = True
+    if threshold is not None:
+        mask = np.logical_or(mask, threshold_mask(images, threshold))
+    try:
+        look = np.ma.masked_array(
+            spectop(images, None, wavelengths)[0], mask=mask
+        )
+    except AssertionError:
+        # print(f"spectop is {spectop}, wavelengths are {wavelengths}")
+        raise
     return look
-    # for image in images:
-    #     mask[np.where(np.isin(image, special_constants))] = True
-    # return np.ma.MaskedArray(look, mask)
 
 
 # TODO: cruft, this should be handled by BandSet -- but is it?
@@ -279,26 +286,32 @@ def colormapped_plot(
     colorbar_fp=None,
     special_constants=None,
     drop_mask_for_display=True,
+    threshold_mask=None
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of a pipeline it
     #   shouldn't be, remove this or something
     if isinstance(array, mpl.figure.Figure):
         return array
-
+    normalization_array = array.copy()
+    if threshold_mask is not None:
+        normalization_array[np.nonzero(threshold_mask)] = np.nan
     if special_constants is not None:
-        not_special = array.copy()[~np.isin(array, special_constants)]
-    else:
-        not_special = array.copy()
-    not_special = not_special[np.isfinite(not_special)]
+        normalization_array = normalization_array[
+            ~np.isin(normalization_array, special_constants)
+        ]
+    not_special = normalization_array[np.isfinite(normalization_array)]
     # this now should be using masks appropriately...but perhaps it is not
-    norm = plt.Normalize(vmin=not_special.min(), vmax=not_special.max())
+    norm = plt.Normalize(
+        vmin=normalization_array.min(), vmax=normalization_array.max()
+    )
+    del normalization_array
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)
     if cmap is None:
         cmap = cm.get_cmap("Greys_r")
-    if drop_mask_for_display:
-        array = array.data
+    # if drop_mask_for_display:
+    #     array = array.data
     # TODO: this probably remains hacky...but it might not
     #  if it isn't we might want a _separate mask_
     #  for things like partials etc.
@@ -342,17 +355,14 @@ def render_nested_rgb_composite(
     from marslab.imgops.look import Look
     rendered_channels = {}
     for channel, instruction in channel_instructions.items():
-        if "params" in instruction.keys():
-            instruction["params"]["special_constants"] = special_constants
-        else:
-            instruction["params"] = {"special_constants": special_constants}
-        pipeline = Look.compile_from_instruction(instruction, metadata)
+        pipeline = Look.compile_from_instruction(
+            instruction, metadata, special_constants
+        )
         rendered_channels[channel] = pipeline.execute(channel_images[channel])
     norm_channels = [
         normalize_range(rendered_channels[name])
         for name in ("red", "green", "blue")
     ]
     return render_rgb_composite(
-        norm_channels,
-        special_constants=special_constants
+        norm_channels, special_constants=special_constants
     )

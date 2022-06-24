@@ -3,7 +3,7 @@ image processing utility functions
 """
 import gc
 import sys
-from functools import partial
+from functools import partial, reduce
 from itertools import chain
 from typing import (
     Callable,
@@ -70,6 +70,14 @@ def crop_all(
     return [crop(array, bounds) for array in arrays]
 
 
+def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
+    masks = []
+    for array in arrays:
+        low, high = np.percentile(array, percentiles)
+        masks.append(np.ma.masked_outside(array, low, high).mask)
+    return reduce(np.logical_and, masks)
+
+
 def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
     """
     produce a 'split' version of a filter that applies itself to slices across
@@ -80,8 +88,13 @@ def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
 
     def multi(array, *, set_axis: int = axis, **kwargs) -> np.ndarray:
         filt = partial(filter_function, **kwargs)
-        filtered = map(filt, np.split(array, array.shape[set_axis], set_axis))
-        return np.concatenate(tuple(filtered), axis=set_axis)
+        filtered = tuple(
+            map(filt, np.split(array, array.shape[set_axis], set_axis))
+        )
+        if isinstance(filtered[0], np.ma.MaskedArray):
+            return np.ma.concatenate(filtered, axis=set_axis)
+        return np.concatenate(filtered, axis=set_axis)
+
 
     return multi
 
@@ -202,7 +215,10 @@ def std_clip(image, sigma=1):
     finite = np.ma.masked_invalid(image)
     mean = np.ma.mean(finite)
     std = np.ma.std(finite)
-    return np.ma.clip(finite, *(mean - std * sigma, mean + std * sigma)).data
+    result = np.ma.clip(finite, *(mean - std * sigma, mean + std * sigma))
+    if isinstance(image, np.ma.MaskedArray):
+        return result
+    return result.data
 
 
 def centile_clip(image, centiles=(1, 99)):
@@ -212,24 +228,30 @@ def centile_clip(image, centiles=(1, 99)):
     """
     finite = np.ma.masked_invalid(image)
     bounds = np.percentile(finite[~finite.mask].data, centiles)
-    return np.ma.clip(finite, *bounds).data
-
+    result = np.ma.clip(finite, *bounds).data
+    if isinstance(image, np.ma.MaskedArray):
+        return result
+    return result.data
 
 def minmax_clip(image, stretch=(0, 0)):
     """
     simple minmax clip that optionally cheats 0 up and 1 down at multiples
     of an array's dynamic range
     """
+    finite = np.ma.masked_invalid(image)
     if stretch != (0, 0):
-        dynamic_range = image.max() - image.min()
+        dynamic_range = finite.max() - finite.min()
         cheat_low, cheat_high = stretch
     else:
         dynamic_range, cheat_low, cheat_high = (0, 0, 0)
-    return np.clip(
+    result = np.clip(
         image,
         image.min() + dynamic_range * cheat_low,
         image.max() - dynamic_range * cheat_high,
     )
+    if isinstance(image, np.ma.MaskedArray):
+        return result
+    return result.data
 
 
 # TODO: would it be better for these functions to use flat mask arrays
