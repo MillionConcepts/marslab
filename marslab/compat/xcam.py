@@ -222,8 +222,13 @@ def polish_xcam_spectrum(
                     ),
                 ),
             }
+            if all([comp + "_VAR" in spectrum.keys() for comp in comps]):
+                values[v_filter]["var"] = (
+                    spectrum[comps[0] + "_VAR"] ** 2
+                    + spectrum[comps[1] + "_VAR"] ** 2
+                ) ** 0.5
             if all([comp + "_ERR" in spectrum.keys() for comp in comps]):
-                values[v_filter]["err"] = (
+                values[v_filter]["iof_err"] = (
                     spectrum[comps[0] + "_ERR"] ** 2
                     + spectrum[comps[1] + "_ERR"] ** 2
                 ) ** 0.5
@@ -240,10 +245,15 @@ def polish_xcam_spectrum(
             "wave": cam_info["filters"][real_filter],
             "mean": spectrum[real_filter] * eye_scale,
         }
+        if real_filter + "_VAR" in spectrum.keys():
+            values[real_filter]["var"] = (
+                spectrum[real_filter + "_VAR"] * eye_scale
+            )
         if real_filter + "_ERR" in spectrum.keys():
-            values[real_filter]["err"] = (
+            values[real_filter]["iof_err"] = (
                 spectrum[real_filter + "_ERR"] * eye_scale
             )
+
     return dict(sorted(values.items(), key=lambda item: item[1]["wave"]))
 
 
@@ -390,7 +400,6 @@ BAND_TO_BAYER = {
     },
 }
 
-
 # TODO: de-vendor downstream (moved up to dustgoggles)
 def integerize(df):
     for column in numeric_columns(df):
@@ -414,10 +423,11 @@ def numeric_columns(data: pd.DataFrame) -> list[str]:
 
 # TODO: way too huge and messy.
 def count_rois_on_xcam_images(
-    roi_hdulist,
-    xcam_image_dict,
-    instrument,
+    roi_hdulist: list,
+    xcam_image_dict: dict,
+    instrument: str,
     pixel_map_dict=None,
+    error_map_dict=None,
     bayer_pixel_dict=None,
     special_constants=tuple([0]),
 ):
@@ -491,19 +501,38 @@ def count_rois_on_xcam_images(
             detector_mask,
             special_constants,
         )
+        if error_map_dict:
+            ioe = np.array(error_map_dict.get(filter_name),dtype='float64')
+            error_image = ioe**2 - image
+
+        # Scale to the effective resolution or bayer element ratio of each band
+        FILTER_TO_RESOLUTION_FACTOR = {
+            "L1": 1, "L2": 1, "L3": 1, "L4": 1, "L5": 2, "L6": 1,
+            "R1": 1, "R2": 4, "R3": 4, "R4": 4, "R5": 4, "R6": 4,
+            "L0G": 2, "L0B": 1, "L0R": 1, "R0G": 2, "R0B": 1, "R0R": 1,}
+
         for roi_name, counts in roi_counts.items():
             roi_listing.append(
                 {
                     "COLOR": roi_name,
                     filter_name: counts["mean"],
-                    filter_name + "_ERR": counts["err"],
+                    filter_name + "_VAR": counts["var"],
                     filter_name + "_MODE": counts["mode"][0],
+                    # This is the wrong calculation for the error; it's just a stand-in until we clarify
+                    filter_name + "_ERR": (count_rois_on_image(rois[eye].values(),rois[eye].keys(),
+                        (error_image + counts["mean"] /
+                         (counts["count"] / FILTER_TO_RESOLUTION_FACTOR[filter_name])),
+                                                              detector_mask,
+                                                              special_constants,
+                                                              )[roi_name]['mean']
+                                           if error_map_dict else None)
                 }
                 | {
                     filter_name + "_" + stat.upper(): counts[stat]
                     for stat in counts.keys()
                 }
             )
+
     roi_frame = pd.DataFrame(roi_listing)
     roi_frame.loc[:, numeric_columns(roi_frame)] = roi_frame.loc[
         :, numeric_columns(roi_frame)
@@ -575,6 +604,7 @@ def count_rois_on_xcam_images(
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
         if filter_name not in base_df.columns:
             base_df[filter_name] = np.nan
+            base_df[filter_name + "_VAR"] = np.nan
             base_df[filter_name + "_ERR"] = np.nan
     return base_df
 
@@ -633,8 +663,8 @@ def construct_field_ordering(filters, fields):
         lambda f: str(f).replace(f"{filters[0]}_", ""),
         filter(lambda f: str(f).startswith(f"{filters[0]}_"), fields)
     )
-    if "ERR" in stats:
-        stats = ["ERR"] + [s for s in stats if stats != "ERR"]
+    if "VAR" in stats:
+        stats = ["VAR"] + [s for s in stats if stats != "VAR"]
     for stat in stats:
         order += list(map(lambda s: f"{s}_{stat}", filters))
     order += [f for f in fields if f not in order]

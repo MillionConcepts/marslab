@@ -27,7 +27,7 @@ def roi_stats(array, extended=True):
         vals = array.compressed()
     else:
         vals = array.ravel()
-    base = {"mean": vals.mean(), "err": vals.std(), "values": vals}
+    base = {"mean": vals.mean(), "var": vals.std(), "values": vals}
     if extended:
         base |= {
             "min": vals.min(),
