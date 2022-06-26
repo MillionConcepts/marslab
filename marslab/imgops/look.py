@@ -114,6 +114,9 @@ class Look(Composition, ABC):
         if (self.metadata is not None) or (self.special_constants is not None):
             self.populate_kwargs()
 
+        # from marslab.imgops.imgutils import threshold_mask
+        # self.add_send("crop", partial(threshold_mask, percentiles=(5, 100)), "render", "threshold_mask")
+
     def _add_wavelengths(self, wavelengths: Sequence[float]):
         look = self.steps["look"]
         if "__name__" in dir(look):
@@ -122,7 +125,7 @@ class Look(Composition, ABC):
             name = look.func.__name__
         if name != "spectop_look":
             return False
-        self.add_kwargs("look", wavelengths=wavelengths)
+        self.add_insert("look", "wavelengths", wavelengths)
         return True
 
     def _add_underlay(self, underlay: "np.ndarray"):
@@ -130,7 +133,7 @@ class Look(Composition, ABC):
             return False
         if "crop" in self.steps:
             underlay = self.steps["crop"](underlay)
-        self.add_kwargs("overlay", base_image=underlay)
+        self.add_insert("overlay", "base_image", underlay)
 
     def _bind_special_runtime_kwargs(self, special_kwargs: Mapping):
         if special_kwargs.get("base_image") is not None:
@@ -161,16 +164,16 @@ class Look(Composition, ABC):
             "bang",
         )
         steps = {}
-        parameters = {}
+        inserts = {}
         for step_name in step_names:
             step, kwargs = interpret_instruction_step(instruction, step_name)
             if step is not None:
                 steps[step_name] = step
             if kwargs != {}:
-                parameters[step_name] = kwargs
+                inserts[step_name] = kwargs
         return cls(
             steps,
-            parameters=parameters,
+            inserts=inserts,
             metadata=metadata,
             special_constants=special_constants,
             bands=instruction.get("bands"),
@@ -183,7 +186,7 @@ class Look(Composition, ABC):
             param_names = [param.name for param in params]
             for thing in ("special_constants", "metadata"):
                 if (hasattr(self, thing)) and (thing in param_names):
-                    self.add_kwargs(step, **{thing: getattr(self, thing)})
+                    self.add_insert(step, thing, getattr(self, thing))
         if self.bands is not None:
             if "WAVELENGTH" in self.metadata.columns:
                 wavelengths = []
