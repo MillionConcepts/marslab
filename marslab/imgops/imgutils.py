@@ -5,18 +5,19 @@ import gc
 import sys
 from functools import partial, reduce
 from itertools import chain
+from operator import mul
 from typing import (
     Callable,
     Sequence,
     MutableMapping,
     Collection,
     Mapping,
+    Union
 )
-from typing import Union
 
-import numpy as np
 from dustgoggles.structures import dig_for_values
-from numpy.ma import MaskedArray
+import numpy as np
+from sympy import factorint
 
 
 def absolutely_destroy(thing):
@@ -51,7 +52,7 @@ def crop(array: np.ndarray, bounds=None, **_) -> np.ndarray:
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
                 pixels[value] = pixels[value] * -1
-    return array[pixels[2] : pixels[3], pixels[0] : pixels[1]]
+    return array[pixels[2]:pixels[3], pixels[0]:pixels[1]]
 
 
 def crop_all(
@@ -94,8 +95,6 @@ def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
         if isinstance(filtered[0], np.ma.MaskedArray):
             return np.ma.concatenate(filtered, axis=set_axis)
         return np.concatenate(filtered, axis=set_axis)
-
-
     return multi
 
 
@@ -233,6 +232,7 @@ def centile_clip(image, centiles=(1, 99)):
         return result
     return result.data
 
+
 def minmax_clip(image, stretch=(0, 0)):
     """
     simple minmax clip that optionally cheats 0 up and 1 down at multiples
@@ -351,14 +351,10 @@ def mapfilter(predicate, key, map_sequence):
     return new_sequence
 
 
-def mask_below(array, value):
-    return MaskedArray(array, array <= value)
-
-
 def make_mask_passer(func, mask_nans=True):
     def mask_passer(array, *args, **kwargs):
         transformed = func(array, *args, **kwargs)
-        if isinstance(array, np.ma.masked_array):
+        if isinstance(array, np.ma.MaskedArray):
             mask = array.mask
             if mask_nans:
                 mask[np.isnan(transformed)] = True
@@ -382,3 +378,71 @@ def get_all_bands_from_all(instructions: Collection[Mapping]):
     instructions, including from instructions with nested bands
     """
     return set(chain.from_iterable(map(get_all_bands, instructions)))
+
+
+def closest_ratio(integer, target):
+    factors = tuple(
+        chain.from_iterable(
+            [[f] * count for f, count in factorint(integer).items()]
+        )
+    )
+    factors = tuple(reversed(factors))
+    factorizations = []
+    possibilities = []
+    for unique in set(factors):
+        left = [unique]
+        right = [f for f in factors if f not in left]
+        quantity = factors.count(unique)
+        right += [unique] * (quantity - 1)
+        ratio = target
+        new_left, new_right = left, right
+        while ratio <= target:
+            for check_ix in range(len(right)):
+                new_left = left + [right[check_ix]]
+                for f in new_left:
+                    if f in new_right:
+                        intermediate = [r for r in right if r != f]
+                        quantity = right.count(f)
+                        intermediate += [f] * (quantity - 1)
+                        new_right = intermediate
+                ratio = reduce(mul, new_left) / reduce(mul, new_right)
+            if ratio <= target:
+                left, right = new_left, new_right
+        possibilities.append(reduce(mul, left) / reduce(mul, right))
+        factorizations.append((left, right))
+        possibilities.append(ratio)
+        factorizations.append((new_left, new_right))
+    differences = [abs(p - target) for p in possibilities]
+    closest = min(differences)
+    for p, diff, fact in zip(possibilities, differences, factorizations):
+        if diff == closest:
+            return p, fact
+
+
+def closest_aspect(new_size, aspect_ratio):
+    _, factors = closest_ratio(new_size, aspect_ratio)
+    left, right = factors
+    return reduce(mul, right), reduce(mul, left)
+
+
+def strict_reshape(array, aspect_ratio):
+    return array.reshape(closest_aspect(array.size, aspect_ratio))
+
+
+def ravel_valid(array):
+    values = array.ravel()
+    if isinstance(values, np.ma.MaskedArray):
+        values[values.mask] = np.nan
+        return values[np.isfinite(values)].data
+    return values[np.isfinite(values)]
+
+
+def nanmask(array, copy=True):
+    if not isinstance(array, np.ma.MaskedArray):
+        return array
+    if copy is True:
+        data = array.data.copy()
+    else:
+        data = array.data
+    data[array.mask] = np.nan
+    return data

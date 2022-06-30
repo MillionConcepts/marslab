@@ -3,12 +3,15 @@ utility functions for dealing with matplotlib
 """
 import io
 
+from dustgoggles.composition import Composition
 from matplotlib.colorbar import Colorbar
 from matplotlib.axes import Subplot
 from matplotlib.figure import Figure
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import PIL.Image
+
+from marslab.imgops.imgutils import std_clip
 
 
 def get_mpl_image(fig):
@@ -44,7 +47,6 @@ def despine(ax: Subplot, edges=("top", "bottom", "left", "right")):
         ax.spines[p].set_visible(False)
 
 
-
 def strip_axes(ax: Subplot):
     remove_ticks(ax)
     despine(ax)
@@ -78,3 +80,20 @@ def attach_axis(ax: Subplot = None, where="right", size="50%", pad=0.1):
         ax = plt.gca()
     divider = make_axes_locatable(ax)
     return divider.append_axes(where, size=size, pad=pad)
+
+
+def prefigure(func, title=None):
+    def prefigured(*args, **kwargs):
+        plt.figure()
+        result = func(*args, **kwargs)
+        if title is not None:
+            plt.title(title)
+        return result
+    return prefigured
+
+
+def clipshow_factory(title=None):
+    return Composition(
+        {'clip': std_clip, 'plot': prefigure(plt.imshow, title)},
+        inserts={'clip': {'sigma': 1}}
+    )
