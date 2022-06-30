@@ -429,9 +429,11 @@ def strict_reshape(array, aspect_ratio):
     return array.reshape(closest_aspect(array.size, aspect_ratio))
 
 
-def ravel_valid(array):
+def ravel_valid(array, copy=True):
     values = array.ravel()
     if isinstance(values, np.ma.MaskedArray):
+        if copy is True:
+            values = values.copy()
         values[values.mask] = np.nan
         return values[np.isfinite(values)].data
     return values[np.isfinite(values)]

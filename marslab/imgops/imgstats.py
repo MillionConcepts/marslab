@@ -27,19 +27,27 @@ def radial_index(array):
     return np.sqrt(y_ix ** 2 + x_ix ** 2)
 
 
-def cut_annulus(array, bounds, region="inner"):
+def join_cut_mask(array, cut_mask, copy=True):
+    if isinstance(array, np.ma.MaskedArray):
+        if copy is True:
+            array = array.copy()
+        array.mask = np.logical_or(cut_mask, array.mask)
+    else:
+        array = np.ma.MaskedArray(array, mask=cut_mask)
+    return array
+
+
+def cut_annulus(array, bounds, region="inner", copy=True):
     mask_method, _ = pick_mask_constructors(region)
     distance = radial_index(array)
     pass_min, pass_max = bounds
     pass_min = pass_min if pass_min is not None else distance.min()
     pass_max = pass_max if pass_max is not None else distance.max()
-    return np.ma.MaskedArray(
-        array,
-        mask=mask_method(distance, pass_min, pass_max).mask
-    )
+    cut_mask = mask_method(distance, pass_min, pass_max).mask
+    return join_cut_mask(array, cut_mask, copy)
 
 
-def cut_rectangle(array, bounds, region="inner", center=True):
+def cut_rectangle(array, bounds, region="inner", center=True, copy=True):
     mask_method, op = pick_mask_constructors(region)
     if center is True:
         y_dist, x_dist = centered_indices(array)
@@ -52,7 +60,8 @@ def cut_rectangle(array, bounds, region="inner", center=True):
         pass_min = pass_min if pass_min is not None else dist.min()
         pass_max = pass_max if pass_max is not None else dist.max()
         masks.append(mask_method(dist, pass_min, pass_max).mask)
-    return np.ma.MaskedArray(array, mask=op(*masks))
+    cut_mask = op(*masks)
+    return join_cut_mask(array, cut_mask, copy)
 
 
 def pick_component(complex_array, component="both"):
