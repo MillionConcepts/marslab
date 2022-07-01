@@ -144,17 +144,22 @@ def neighbor_kernels():
 
 
 def autocompare(image, copy=True):
-    results = []
-    std, mean = np.std(image), np.mean(image)
+    abs_image = np.abs(image)
+    statistics = {
+        "std": np.std(image),
+        "mean": np.mean(image),
+        "std_abs": np.std(abs_image),
+        "mean_abs": np.mean(abs_image)
+    }
+    edge_results = []
     canvas = nanmask(image, copy)
     for kernel in neighbor_kernels():
-        results.append((convolve(canvas, kernel)))
+        edge_results.append((convolve(canvas, kernel)))
     del canvas
-    values = ravel_valid(np.concatenate(results))
+    values = ravel_valid(np.concatenate(edge_results))
     abs_values = np.abs(values)
-    return {
-        "std": std,
-        "mean": mean,
+    statistics |= {
         "edge_mean_abs": np.mean(abs_values),
         "edge_std_abs": np.std(abs_values),
     }
+    return statistics
