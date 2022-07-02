@@ -71,8 +71,10 @@ def pick_component(complex_array, component="both"):
         return complex_array.real
     if component == "imag":
         return complex_array.imag
-    if component == "norm":
+    if component in ("norm", "magnitude"):
         return np.abs(complex_array)
+    if component == "phase":
+        return np.arctan2(complex_array.real, complex_array.imag)
     raise ValueError(f"{component} is not a known component.")
 
 
