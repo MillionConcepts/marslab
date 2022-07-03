@@ -227,7 +227,7 @@ def centile_clip(image, centiles=(1, 99)):
     """
     finite = np.ma.masked_invalid(image)
     bounds = np.percentile(finite[~finite.mask].data, centiles)
-    result = np.ma.clip(finite, *bounds).data
+    result = np.ma.clip(finite, *bounds)
     if isinstance(image, np.ma.MaskedArray):
         return result
     return result.data
