@@ -33,7 +33,7 @@ def decorrelation_stretch(
     contrast_stretch: Optional[Union[Sequence[float], float]] = None,
     special_constants: Optional[Collection[float]] = None,
     sigma: Optional[float] = None,
-    threshold: Optional[tuple[float, float]] = None
+    threshold: Optional[tuple[float, float]] = None,
 ):
     """
     decorrelation stretch of passed array on last axis of array. see

@@ -254,6 +254,13 @@ def minmax_clip(image, stretch=(0, 0)):
     return result.data
 
 
+def sinh_scale(array, bounds=(0, 1), stretch=1):
+    minimum, maximum = array.min(), array.max()
+    scaled = (array - minimum) / (maximum - minimum) - 0.5
+    expanded = np.sinh(scaled * stretch)
+    return normalize_range(expanded, bounds)
+
+
 # TODO: would it be better for these functions to use flat mask arrays
 #  rather than coordinate grids? (performance is the same, question is
 #  interface convenience)
