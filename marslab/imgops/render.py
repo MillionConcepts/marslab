@@ -7,7 +7,6 @@ from itertools import repeat
 from functools import reduce
 from typing import Union, Optional, Sequence, Collection
 
-from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.figure
@@ -32,7 +31,7 @@ def decorrelation_stretch(
     channels: Sequence[np.ndarray],
     contrast_stretch: Optional[Union[Sequence[float], float]] = None,
     special_constants: Optional[Collection[float]] = None,
-    sigma: Optional[float] = None,
+    sigma: Optional[float] = 1,
     threshold: Optional[tuple[float, float]] = None,
 ):
     """
@@ -55,7 +54,8 @@ def decorrelation_stretch(
     sigma: fixed target standard deviation for each channel. must be >= 0;
     ranges between 0 and 1 recommended. None means that the original standard
     deviation per channel is used as the target (this is a 'classic'
-    decorrelation stretch)
+    decorrelation stretch). Doesn't matter if you're applying a contrast
+    stretch.
     """
     working_array = np.dstack(channels)
     if special_constants is not None:
@@ -75,15 +75,6 @@ def decorrelation_stretch(
     else:
         working_dtype = channel_vectors.dtype
     channel_covariance = np.ma.cov(channel_vectors.T).astype(working_dtype)
-    # target per-channel standard deviation as a diagonalized matrix.
-    # set equal to sigma if sigma is passed; otherwise simply set
-    # equal to per-channel input standard deviation
-    if sigma is not None:
-        channel_sigmas = np.diag(
-            np.array([sigma for _ in range(len(channels))])
-        )
-    else:
-        channel_sigmas = np.diag(np.sqrt(channel_covariance.diagonal()))
     eigenvalues, eigenvectors = np.linalg.eig(channel_covariance)
     # diagonal matrix containing per-band "stretch factors"
     stretch_matrix = np.diag(1 / np.sqrt(eigenvalues))
@@ -93,8 +84,19 @@ def decorrelation_stretch(
     # rotates into eigenspace of covariance matrix, applies stretch,
     # rotates back to channelspace, applies sigma scaling
     transformation_matrix = reduce(
-        np.dot, [channel_sigmas, eigenvectors, stretch_matrix, eigenvectors.T]
+        np.dot, [eigenvectors, stretch_matrix, eigenvectors.T]
     )
+    # target per-channel standard deviation as a diagonalized matrix.
+    # set equal to sigma if sigma is passed; otherwise simply set
+    # equal to per-channel input standard deviation. if it's 1, skip the step.
+    if sigma is None:
+        channel_sigmas = np.diag(np.sqrt(channel_covariance.diagonal()))
+        transformation_matrix = np.dot(transformation_matrix, channel_sigmas)
+    elif sigma != 1:
+        channel_sigmas = np.diag(
+            np.array([sigma for _ in range(len(channels))])
+        )
+        transformation_matrix = np.dot(transformation_matrix, channel_sigmas)
     # TODO: this 'offset' term does not explicitly exist in the matlab
     #  implementation. check against reference algorithm. it rarely does
     #  anything, though.
