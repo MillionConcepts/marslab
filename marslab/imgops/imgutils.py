@@ -74,7 +74,7 @@ def crop_all(
 def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
     masks = []
     for array in arrays:
-        low, high = np.percentile(array, percentiles)
+        low, high = np.percentile(ravel_valid(array), percentiles)
         masks.append(np.ma.masked_outside(array, low, high).mask)
     return reduce(np.logical_and, masks)
 
@@ -446,12 +446,20 @@ def ravel_valid(array, copy=True):
     return values[np.isfinite(values)]
 
 
-def nanmask(array, copy=True):
+def setmask(array, value, copy=True):
     if not isinstance(array, np.ma.MaskedArray):
         return array
     if copy is True:
         data = array.data.copy()
     else:
         data = array.data
-    data[array.mask] = np.nan
+    data[array.mask] = value
     return data
+
+
+def zero_mask(array, copy=True):
+    return setmask(array, 0, copy)
+
+
+def nanmask(array, copy=True):
+    return setmask(array, np.nan, copy)

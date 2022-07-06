@@ -1,8 +1,8 @@
 from functools import reduce
-
 import numpy as np
+
 from dustgoggles.composition import Composition
-from marslab.imgops.imgutils import nanmask, ravel_valid
+from marslab.imgops.imgutils import nanmask, ravel_valid, zero_mask
 from marslab.imgops.pltutils import clipshow_factory
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
 from scipy.ndimage import convolve
@@ -110,11 +110,6 @@ def boxfilter(array, bounds, region, component, center=True):
     return space(rect.data, component)
 
 
-def zero_mask(masked):
-    masked[masked.mask] = 0
-    return masked.data
-
-
 def zerocut(*args, **kwargs):
     return zero_mask(cut_rectangle(*args, **kwargs))
 
@@ -165,3 +160,16 @@ def autocompare(image, copy=True):
         "edge_std_abs": np.std(abs_values),
     }
     return statistics
+
+
+def center_and_scale(array):
+    return (array - array.mean()) / array.std()
+
+
+def center(array):
+    return array - array.mean()
+
+
+def scale(array):
+    return array / array.std()
+
