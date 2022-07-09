@@ -222,10 +222,10 @@ def polish_xcam_spectrum(
                     ),
                 ),
             }
-            if all([comp + "_VAR" in spectrum.keys() for comp in comps]):
+            if all([comp + "_STD" in spectrum.keys() for comp in comps]):
                 values[v_filter]["var"] = (
-                    spectrum[comps[0] + "_VAR"] ** 2
-                    + spectrum[comps[1] + "_VAR"] ** 2
+                    spectrum[comps[0] + "_STD"] ** 2
+                    + spectrum[comps[1] + "_STD"] ** 2
                 ) ** 0.5
             if all([comp + "_ERR" in spectrum.keys() for comp in comps]):
                 values[v_filter]["iof_err"] = (
@@ -245,9 +245,9 @@ def polish_xcam_spectrum(
             "wave": cam_info["filters"][real_filter],
             "mean": spectrum[real_filter] * eye_scale,
         }
-        if real_filter + "_VAR" in spectrum.keys():
+        if real_filter + "_STD" in spectrum.keys():
             values[real_filter]["var"] = (
-                spectrum[real_filter + "_VAR"] * eye_scale
+                spectrum[real_filter + "_STD"] * eye_scale
             )
         if real_filter + "_ERR" in spectrum.keys():
             values[real_filter]["iof_err"] = (
@@ -516,7 +516,7 @@ def count_rois_on_xcam_images(
                 {
                     "COLOR": roi_name,
                     filter_name: counts["mean"],
-                    filter_name + "_VAR": counts["var"],
+                    filter_name + "_STD": counts["var"],
                     filter_name + "_MODE": counts["mode"][0],
                     # This is the wrong calculation for the error; it's just a stand-in until we clarify
                     filter_name + "_ERR": (count_rois_on_image(rois[eye].values(),rois[eye].keys(),
@@ -604,7 +604,7 @@ def count_rois_on_xcam_images(
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
         if filter_name not in base_df.columns:
             base_df[filter_name] = np.nan
-            base_df[filter_name + "_VAR"] = np.nan
+            base_df[filter_name + "_STD"] = np.nan
             base_df[filter_name + "_ERR"] = np.nan
     return base_df
 
@@ -663,8 +663,8 @@ def construct_field_ordering(filters, fields):
         lambda f: str(f).replace(f"{filters[0]}_", ""),
         filter(lambda f: str(f).startswith(f"{filters[0]}_"), fields)
     )
-    if "VAR" in stats:
-        stats = ["VAR"] + [s for s in stats if stats != "VAR"]
+    if "STD" in stats:
+        stats = ["STD"] + [s for s in stats if stats != "STD"]
     for stat in stats:
         order += list(map(lambda s: f"{s}_{stat}", filters))
     order += [f for f in fields if f not in order]
