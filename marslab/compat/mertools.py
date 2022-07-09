@@ -205,7 +205,7 @@ def merspect_to_marslab(fn, write=True):
             *list(
                 chain.from_iterable(
                     [
-                        (filt, filt + "_VAR")
+                        (filt, filt + "_STD")
                         for filt in make_xcam_filter_dict("MCAM").keys()
                     ]
                 )
@@ -225,7 +225,7 @@ def merspect_to_marslab(fn, write=True):
             *list(
                 chain.from_iterable(
                     [
-                        (filt, filt + "_VAR")
+                        (filt, filt + "_STD")
                         for filt in make_xcam_filter_dict("ZCAM").keys()
                     ]
                 )
@@ -260,7 +260,7 @@ def merspect_to_marslab(fn, write=True):
                 data[f"{filt}"].loc[color] = this_color.loc[i][
                     f"{color} Mean Value"
                 ]
-                data[f"{filt}_VAR"].loc[color] = this_color.loc[i][
+                data[f"{filt}_STD"].loc[color] = this_color.loc[i][
                     f"{color} Standard Deviation"
                 ]
                 if feature is not None:
