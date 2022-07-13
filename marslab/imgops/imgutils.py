@@ -114,7 +114,14 @@ def find_masked_bounds(image, cheat_low, cheat_high):
     relatively memory-efficient way to perform bound calculations for
     normalize_range on a masked array.
     """
-    valid = image[~image.mask].data
+    if isinstance(image.mask, np.bool_):
+        if image.mask:
+            valid = np.array([])
+        else:
+            valid = image.data
+    else:
+        valid = image[~image.mask].data
+    valid = valid[np.isfinite(valid)]
     if valid.size == 0:
         return None, None
     if (cheat_low != 0) and (cheat_high != 0):
