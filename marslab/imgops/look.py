@@ -132,7 +132,9 @@ class Look(Composition, ABC):
         if "overlay" not in self.index:
             return False
         if "crop" in self.steps:
-            underlay = self.steps["crop"](underlay)
+            underlay = self.steps["crop"](
+                underlay, **self.inserts.get('crop', {})
+            )
         self.add_insert("overlay", "base_image", underlay)
 
     def _bind_special_runtime_kwargs(self, special_kwargs: Mapping):

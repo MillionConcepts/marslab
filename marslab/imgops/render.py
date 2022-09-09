@@ -122,7 +122,8 @@ def render_overlay(
     overlay_cmap=cm.get_cmap("viridis"),
     base_cmap=cm.get_cmap("Greys_r"),
     overlay_opacity=0.5,
-    mpl_settings=None,
+    fill_mask=True,
+    colorbar_fp=None
 ):
     """
     TODO: this is a bit of a hack. consider finding a cleaner way to do the
@@ -132,21 +133,24 @@ def render_overlay(
       stored separately, which is ugly and circuitous. so maybe no intermediate
       possibility, or at least intent
     """
-    if mpl_settings is None:
-        mpl_settings = {}
     norm = plt.Normalize(vmin=overlay_image.min(), vmax=overlay_image.max())
     fig = plt.figure()
     ax = fig.add_subplot()
-
-    base_image = normalize_range(base_image, (0, 1), 1)
     if isinstance(base_cmap, str):
         base_cmap = cm.get_cmap(base_cmap)
     if isinstance(overlay_cmap, str):
         overlay_cmap = cm.get_cmap(overlay_cmap)
-    ax.imshow(
-        base_cmap(base_image) * (1 - overlay_opacity)
-        + overlay_cmap(norm(overlay_image)) * overlay_opacity
-    )
+    base = base_cmap(normalize_range(base_image))
+    overlay = overlay_cmap(norm(overlay_image))
+    blend_array = np.full(base_image.shape, overlay_opacity)
+    if fill_mask is True:
+        blend_array = np.where(
+            overlay_image.mask, np.zeros(base_image.shape), blend_array
+        )
+    base[:, :, 3] = 1 - blend_array
+    overlay[:, :, 3] = blend_array
+    ax.imshow(base)
+    ax.imshow(overlay)
     strip_axes(ax)
     cax = attach_axis(ax, size="3%", pad="0.5%")
     colorbar = plt.colorbar(
@@ -154,8 +158,8 @@ def render_overlay(
         alpha=overlay_opacity,
         cax=cax,
     )
-    if mpl_settings.get("colorbar_fp"):
-        set_colorbar_font(colorbar, mpl_settings["colorbar_fp"])
+    if colorbar_fp is not None:
+        set_colorbar_font(colorbar, colorbar_fp)
     return fig
 
 
@@ -291,8 +295,8 @@ def colormapped_plot(
     threshold_mask=None
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
-    # TODO: hacky bailout if this is stuck on the end of a pipeline it
-    #   shouldn't be, remove this or something
+    # TODO: hacky bailout if this is stuck on the end of an overlay pipeline,
+    #  this can be cleaned up much more effectively
     if isinstance(array, mpl.figure.Figure):
         return array
     normalization_array = array.copy()
