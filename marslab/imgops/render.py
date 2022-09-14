@@ -17,7 +17,7 @@ from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import (
-    normalize_range, eightbit, enhance_color, threshold_mask
+    normalize_range, eightbit, enhance_color, threshold_mask, skymask
 )
 from marslab.imgops.pltutils import (
     set_colorbar_font,
@@ -65,8 +65,10 @@ def decorrelation_stretch(
     else:
         working_array = np.ma.masked_array(working_array)
     if threshold is not None:
+        tmask = threshold_mask(channels)
+        tmask = np.dstack([tmask for _ in range(3)])
         working_array.mask = np.logical_or(
-            working_array.mask, threshold_mask([working_array], threshold)
+            working_array.mask, tmask
         )
     input_shape = working_array.shape
     channel_vectors = working_array.reshape(-1, input_shape[-1])
@@ -74,12 +76,17 @@ def decorrelation_stretch(
         working_dtype = np.float32
     else:
         working_dtype = channel_vectors.dtype
-    channel_covariance = np.ma.cov(channel_vectors.T).astype(working_dtype)
+    if (cmask := channel_vectors.mask).size > 1:
+        selector = cmask[:, 0] | cmask[:, 1] | cmask[:, 2]
+        valid_vectors = channel_vectors[~selector]
+    else:
+        valid_vectors = channel_vectors
+    channel_covariance = np.ma.cov(valid_vectors.T).astype(working_dtype)
     eigenvalues, eigenvectors = np.linalg.eig(channel_covariance)
     # diagonal matrix containing per-band "stretch factors"
     stretch_matrix = np.diag(1 / np.sqrt(eigenvalues))
     # mean values for each channel
-    channel_means = np.mean(channel_vectors, axis=0, dtype=working_dtype)
+    channel_means = np.mean(valid_vectors, axis=0, dtype=working_dtype)
     # full transformation matrix:
     # rotates into eigenspace of covariance matrix, applies stretch,
     # rotates back to channelspace, applies sigma scaling
@@ -198,7 +205,8 @@ def spectop_look(
     spectop=None,
     wavelengths=None,
     special_constants=None,
-    threshold: Optional[tuple[float, float]] = None
+    threshold: Optional[tuple[float, float]] = None,
+    skymask_threshold: Optional[float] = None
 ):
     mask = np.full(images[0].shape, False, bool)
     if special_constants is not None:
@@ -206,6 +214,8 @@ def spectop_look(
             mask[np.nonzero(np.isin(image, special_constants))] = True
     if threshold is not None:
         mask = np.logical_or(mask, threshold_mask(images, threshold))
+    if skymask_threshold is not None:
+        mask = np.logical_or(mask, skymask(images, skymask_threshold))
     try:
         look = np.ma.masked_array(
             spectop(images, None, wavelengths)[0], mask=mask
@@ -292,7 +302,7 @@ def colormapped_plot(
     colorbar_fp=None,
     special_constants=None,
     drop_mask_for_display=True,
-    threshold_mask=None
+    threshold_mask_array=None
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of an overlay pipeline,
@@ -301,11 +311,12 @@ def colormapped_plot(
         return array
     normalization_array = array.copy()
     if threshold_mask is not None:
-        normalization_array[np.nonzero(threshold_mask)] = np.nan
+        normalization_array[np.nonzero(threshold_mask_array)] = np.nan
     if special_constants is not None:
         normalization_array = normalization_array[
             ~np.isin(normalization_array, special_constants)
         ]
+    # TODO: hmm, we should be using this maybe?
     not_special = normalization_array[np.isfinite(normalization_array)]
     # this now should be using masks appropriately...but perhaps it is not
     norm = plt.Normalize(

@@ -79,6 +79,14 @@ def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
     return reduce(np.logical_and, masks)
 
 
+def skymask(arrays: Collection[np.ndarray], percentile=75):
+    mean = np.mean(np.dstack(arrays), axis=-1)
+    segments = mean > np.percentile(mean, percentile)
+    from skimage.measure import label
+    labels = label(segments, connectivity=1)
+    return labels == 1
+
+
 def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
     """
     produce a 'split' version of a filter that applies itself to slices across
@@ -204,6 +212,14 @@ def enhance_color(image: np.ndarray, bounds, stretch):
     conventional "enhanced color" operation
     """
     return split_filter(normalize_range)(image, bounds=bounds, stretch=stretch)
+
+
+def clip_finite(image, a_min: int, a_max: int):
+    finite = np.ma.masked_invalid(image)
+    result = np.ma.clip(finite, a_min, a_max)
+    if isinstance(image, np.ma.MaskedArray):
+        return result
+    return result.data
 
 
 def std_clip(image, sigma=1):
