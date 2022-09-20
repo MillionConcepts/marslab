@@ -351,12 +351,12 @@ def colormapped_plot(
     return fig
 
 
-def simple_figure(image: Union[ArrayLike, Image.Image]) -> mpl.figure.Figure:
+def simple_figure(image: Union[ArrayLike, Image.Image], **imshow_kwargs) -> mpl.figure.Figure:
     """
     wrap an array up in a matplotlib subplot and not much else
     """
     fig, ax = plt.subplots()
-    ax.imshow(image)
+    ax.imshow(image, **imshow_kwargs)
     strip_axes(ax)
     return fig
 
