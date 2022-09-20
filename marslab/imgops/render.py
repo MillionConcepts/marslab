@@ -351,10 +351,14 @@ def colormapped_plot(
     return fig
 
 
-def simple_figure(image: Union[ArrayLike, Image.Image], **imshow_kwargs) -> mpl.figure.Figure:
+def simple_figure(
+    image: Union[ArrayLike, Image.Image], zero_mask=True, **imshow_kwargs
+) -> mpl.figure.Figure:
     """
     wrap an array up in a matplotlib subplot and not much else
     """
+    if (zero_mask is True) and isinstance(image, np.ma.MaskedArray):
+        image = np.ma.filled(image, 0)
     fig, ax = plt.subplots()
     ax.imshow(image, **imshow_kwargs)
     strip_axes(ax)
@@ -366,6 +370,7 @@ def render_nested_rgb_composite(
     *,
     metadata,
     special_constants=None,
+    norm_kwargs=None,
     **channel_instructions,
 ):
     # TODO: is there a cleaner way to handle this import?
@@ -376,8 +381,9 @@ def render_nested_rgb_composite(
             instruction, metadata, special_constants
         )
         rendered_channels[channel] = pipeline.execute(channel_images[channel])
+    norm_kwargs = {} if norm_kwargs is None else norm_kwargs
     norm_channels = [
-        normalize_range(rendered_channels[name])
+        normalize_range(rendered_channels[name], **norm_kwargs)
         for name in ("red", "green", "blue")
     ]
     return render_rgb_composite(
