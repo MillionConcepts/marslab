@@ -17,7 +17,6 @@ from typing import (
 
 from dustgoggles.structures import dig_for_values
 import numpy as np
-from sympy import factorint
 
 
 def absolutely_destroy(thing):
@@ -404,6 +403,8 @@ def get_all_bands_from_all(instructions: Collection[Mapping]):
 
 
 def closest_ratio(integer, target):
+    from sympy import factorint
+
     factors = tuple(
         chain.from_iterable(
             [[f] * count for f, count in factorint(integer).items()]

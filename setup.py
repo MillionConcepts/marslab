@@ -32,6 +32,7 @@ setup(
         "notebooks": ["jupyter"],
         "regions": ["astropy"],
         "time": ["sympy", "python-dateutil"],
-        "geom": ["pdr"]
+        "geom": ["pdr"],
+        "strict_reshape": ["sympy"]
     }
 )

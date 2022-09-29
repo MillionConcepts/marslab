@@ -3,7 +3,6 @@ import numpy as np
 
 from dustgoggles.composition import Composition
 from marslab.imgops.imgutils import nanmask, ravel_valid, zero_mask
-from marslab.imgops.pltutils import clipshow_factory
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
 from scipy.ndimage import convolve
 
@@ -125,9 +124,11 @@ def recursive_cut(
 
 
 def fftplot_factory(title=None, component="norm"):
+    from marslab.imgops.pltutils import clipshow_factory
+
     clipshow = clipshow_factory(title)
     transformer = Composition((frequency, clipshow.execute))
-    transformer.add_insert(0, "component", "norm")
+    transformer.add_insert(0, "component", component)
 
 
 def neighbor_kernels():

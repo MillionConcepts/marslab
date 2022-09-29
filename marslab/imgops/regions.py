@@ -1,10 +1,7 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 from scipy.ndimage import sobel, distance_transform_edt
 from scipy.stats import skew, kurtosis, mode
-
-from marslab.imgops.pltutils import strip_axes
 
 
 def furthest_from_edge(image):
@@ -89,6 +86,9 @@ def draw_edgemaps_on_image(
     width=4,
     colorize=True,
 ):
+    from marslab.imgops.pltutils import strip_axes
+    import matplotlib.pyplot as plt
+
     fig = plt.figure()
     ax = fig.add_subplot()
     ax.imshow(image, interpolation=None)
