@@ -1,7 +1,6 @@
 name: marslab
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - python>=3.9
   - numpy
@@ -10,10 +9,8 @@ dependencies:
   - git
   - clize
   - pip
-  - pvl
   - python-Levenshtein
   - scipy
-  - opencv
   - fs
   - pathos
   - cytoolz
