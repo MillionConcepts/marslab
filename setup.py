@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="marslab",
-    version="0.9.9",
+    version="0.9.9p",
     url="https://github.com/millionconcepts/marslab.git",
     author="Million Concepts",
     author_email="chase@millionconcepts.com",
