@@ -1,10 +1,12 @@
 from functools import reduce
 import numpy as np
+from cytoolz import keyfilter, keymap
 
 from dustgoggles.composition import Composition
 from marslab.imgops.imgutils import nanmask, ravel_valid, zero_mask
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
 from scipy.ndimage import convolve
+from scipy import stats
 
 
 def pick_mask_constructors(region):
@@ -174,3 +176,29 @@ def center(array):
 def scale(array):
     return array / array.std()
 
+
+def unpack_scipy_describe(result):
+    return {
+        'mean': result.mean,
+        'n': result.nobs,
+        'min': result.minmax[0],
+        'max': result.minmax[1],
+        'range': result.minmax[1] - result.minmax[0],
+        'skew': result.skewness,
+        'kurtosis': result.kurtosis,
+        'var': result.variance
+    }
+
+
+# noinspection PyTypeChecker
+def rvdescribe(array, rv=True):
+    result = {'shape': array.shape}
+    if rv is True:
+        array = ravel_valid(array)
+    result |= unpack_scipy_describe(stats.describe(array))
+    if result['min'] >= 0:
+        return result
+    absresult = unpack_scipy_describe(stats.describe(np.abs(array)))
+    absresult = keyfilter(lambda k: k != "n", absresult)
+    absresult = keymap(lambda x: f"{x}_abs", absresult)
+    return result | absresult
