@@ -202,7 +202,7 @@ def rvdescribe(array, rv=True):
     absresult = unpack_scipy_describe(stats.describe(np.abs(array)))
     absresult = keyfilter(lambda k: k != "n", absresult)
     absresult = keymap(lambda x: f"{x}_abs", absresult)
-    result['std_abs'] = np.sqrt(result['var_abs'])
+    absresult['std_abs'] = np.sqrt(absresult['var_abs'])
     return result | absresult
 
 
