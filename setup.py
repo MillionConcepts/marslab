@@ -33,6 +33,7 @@ setup(
         "regions": ["astropy"],
         "time": ["sympy", "python-dateutil"],
         "geom": ["pdr"],
-        "strict_reshape": ["sympy"]
+        "strict_reshape": ["sympy"],
+        "histograms": ["fast-histogram"]
     }
 )

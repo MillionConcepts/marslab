@@ -186,7 +186,7 @@ def unpack_scipy_describe(result):
         'range': result.minmax[1] - result.minmax[0],
         'skew': result.skewness,
         'kurtosis': result.kurtosis,
-        'var': result.variance
+        'var': result.variance,
     }
 
 
@@ -196,9 +196,49 @@ def rvdescribe(array, rv=True):
     if rv is True:
         array = ravel_valid(array)
     result |= unpack_scipy_describe(stats.describe(array))
+    result['std'] = np.sqrt(result['var'])
     if result['min'] >= 0:
         return result
     absresult = unpack_scipy_describe(stats.describe(np.abs(array)))
     absresult = keyfilter(lambda k: k != "n", absresult)
     absresult = keymap(lambda x: f"{x}_abs", absresult)
+    result['std_abs'] = np.sqrt(result['var_abs'])
     return result | absresult
+
+
+def gradient_stats(
+    array, sample_distance=1, get_mag=True, return_components=True
+):
+    dy, dx = np.gradient(array, sample_distance)
+    component_dict = {'dy': dy, 'dx': dx}
+    if get_mag is True:
+        component_dict['norm'] = dy ** 2 + dx ** 2
+    stat_dict = {k: rvdescribe(v) for k, v in component_dict.items()}
+    if return_components is True:
+        return stat_dict, component_dict
+    return stat_dict, {}
+
+
+def fhplot(
+    array, bins=128, vrange=None, ax=None, return_counts=False, **mpl_kwargs
+):
+    try:
+        import fast_histogram as fh
+        import matplotlib.pyplot as plt
+    except ImportError:
+        raise ValueError(
+            "The fast-histogram and maplotlib libraries must be installed to "
+            "use marslab.imgops.imgstats.fhplot."
+        )
+    if len(array.shape) > 1:
+        raise ValueError("this function only plots 1D arrays.")
+    if vrange is None:
+        vrange = (array.min(), array.max())
+    counts = fh.histogram1d(array, bins=bins, range=vrange)
+    bin_positions = np.linspace(*vrange, bins + 1)
+    if ax is None:
+        ax = plt.gca()
+    ax.hist(bin_positions[:-1], bin_positions, weights=counts, **mpl_kwargs)
+    if return_counts is True:
+        return ax, counts, bin_positions
+    return ax
