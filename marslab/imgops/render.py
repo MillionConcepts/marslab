@@ -212,17 +212,16 @@ def spectop_look(
     if special_constants is not None:
         for image in images:
             mask[np.nonzero(np.isin(image, special_constants))] = True
-    for image in images:
-        if isinstance(image, np.ma.MaskedArray):
-            mask = np.logical_or(mask, image.mask)
     if threshold is not None:
         mask = np.logical_or(mask, threshold_mask(images, threshold))
     if skymask_threshold is not None:
         mask = np.logical_or(mask, skymask(images, skymask_threshold))
     try:
-        look = np.ma.masked_array(
-            spectop(images, None, wavelengths)[0], mask=mask
-        )
+        look = spectop(images, None, wavelengths)[0]
+        if isinstance(look, np.ma.MaskedArray):
+            look.mask += mask
+        else:
+            look = np.ma.MaskedArray(look, mask=mask)
     except AssertionError:
         # print(f"spectop is {spectop}, wavelengths are {wavelengths}")
         raise

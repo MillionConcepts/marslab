@@ -39,13 +39,18 @@ def preprocess_input(reflectance, errors=None, wavelengths=None):
     return [np.asarray(thing) for thing in (reflectance, errors, wavelengths)]
 
 
-def reindex_if_pandas(*object_pairs):
+def reindex_or_mask(*object_pairs):
     returning = []
     for pair in object_pairs:
+        thing = pair[0]
         if isinstance(pair[1], (pd.DataFrame, pd.Series)):
-            returning.append(pd.Series(pair[0], index=pair[1].columns))
-        else:
-            returning.append(pair[0])
+            thing = pd.Series(thing, index=pair[1].columns)
+        elif isinstance(pair[1], Sequence):
+            masked = filter(lambda a: isinstance(a, np.ma.MaskedArray), pair[1])
+            masks = [m.mask for m in masked]
+            if len(masks) > 0:
+                thing = np.ma.masked_array(thing, mask=sum(masks))
+        returning.append(thing)
     return returning
 
 
@@ -79,7 +84,7 @@ def ratio(
     if None not in error_array:
         error_array = error_array[0:2]
     error_values = addition_in_quadrature(error_array)
-    return reindex_if_pandas(
+    return reindex_or_mask(
         (ratio_value, reflectance), (error_values, errors)
     )
 
@@ -100,7 +105,7 @@ def band_avg(
 
     average_of_reflectance = np.mean(reflectance_array, axis=0)
     error_values = addition_in_quadrature(error_array)
-    return reindex_if_pandas(
+    return reindex_or_mask(
         (average_of_reflectance, reflectance), (error_values, errors)
     )
 
@@ -126,7 +131,7 @@ def slope(
     error_values = addition_in_quadrature(error_array)
     if error_values is not None:
         error_values /= distance
-    return reindex_if_pandas(
+    return reindex_or_mask(
         (slope_value, reflectance), (error_values, errors)
     )
 
@@ -175,7 +180,7 @@ def band_depth(
     error_values = addition_in_quadrature(error_array)
     if error_values is not None:
         error_values /= continuum_ref
-    return reindex_if_pandas(
+    return reindex_or_mask(
         (band_depth_value, reflectance), (error_values, errors)
     )
 
@@ -197,7 +202,7 @@ def band_min(
     reflectance_array, _error_array, wavelength_array = preprocess_input(
         reflectance, None, wavelengths
     )
-    return reindex_if_pandas(
+    return reindex_or_mask(
         (
             wavelength_array[np.argmin(reflectance_array, axis=0)],
             reflectance,
@@ -216,7 +221,7 @@ def band_max(
     reflectance_array, _error_array, wavelength_array = preprocess_input(
         reflectance, None, wavelengths
     )
-    return reindex_if_pandas(
+    return reindex_or_mask(
         (
             wavelength_array[np.argmax(reflectance_array, axis=0)],
             reflectance,
