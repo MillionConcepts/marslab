@@ -80,7 +80,7 @@ def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
 
 def skymask(arrays: Collection[np.ndarray], percentile=75):
     mean = np.mean(np.dstack(arrays), axis=-1)
-    segments = mean > np.percentile(mean, percentile)
+    segments = mean > np.percentile(ravel_valid(mean), percentile)
     from skimage.measure import label
     labels = label(segments, connectivity=1)
     return labels == 1

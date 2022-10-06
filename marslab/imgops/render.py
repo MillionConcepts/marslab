@@ -33,6 +33,8 @@ def decorrelation_stretch(
     special_constants: Optional[Collection[float]] = None,
     sigma: Optional[float] = 1,
     threshold: Optional[tuple[float, float]] = None,
+    skymask_threshold: Optional[float] = None,
+    mask_fill_tone=None
 ):
     """
     decorrelation stretch of passed array on last axis of array. see
@@ -65,10 +67,16 @@ def decorrelation_stretch(
     else:
         working_array = np.ma.masked_array(working_array)
     if threshold is not None:
-        tmask = threshold_mask(channels)
+        tmask = threshold_mask(channels, threshold)
         tmask = np.dstack([tmask for _ in range(3)])
         working_array.mask = np.logical_or(
             working_array.mask, tmask
+        )
+    if skymask_threshold is not None:
+        smask = skymask(channels, skymask_threshold)
+        smask = np.dstack([smask for _ in range(3)])
+        working_array.mask = np.logical_or(
+            working_array.mask, smask
         )
     input_shape = working_array.shape
     channel_vectors = working_array.reshape(-1, input_shape[-1])
@@ -118,9 +126,12 @@ def decorrelation_stretch(
 
     # special limiter included ensuite
     if contrast_stretch is None:
-        return normalize_range(dcs_array)
-    return enhance_color(dcs_array, (0, 1), contrast_stretch)
-
+        image = normalize_range(dcs_array)
+    else:
+        image = enhance_color(dcs_array, (0, 1), contrast_stretch)
+    if mask_fill_tone is not None:
+        image[working_array.mask] = mask_fill_tone
+    return image
 
 def render_overlay(
     overlay_image,
