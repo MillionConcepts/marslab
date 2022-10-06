@@ -301,8 +301,6 @@ def colormapped_plot(
     no_ticks=True,
     colorbar_fp=None,
     special_constants=None,
-    drop_mask_for_display=True,
-    threshold_mask_array=None
 ):
     """generate a colormapped plot, optionally with colorbar, from 2D array"""
     # TODO: hacky bailout if this is stuck on the end of an overlay pipeline,
@@ -310,14 +308,12 @@ def colormapped_plot(
     if isinstance(array, mpl.figure.Figure):
         return array
     normalization_array = array.copy()
-    if threshold_mask is not None:
-        normalization_array[np.nonzero(threshold_mask_array)] = np.nan
     if special_constants is not None:
         normalization_array = normalization_array[
             ~np.isin(normalization_array, special_constants)
         ]
-    # TODO: hmm, we should be using this maybe?
-    not_special = normalization_array[np.isfinite(normalization_array)]
+    # TODO: hmm, we should be using this maybe
+    normalization_array = normalization_array[np.isfinite(normalization_array)]
     # this now should be using masks appropriately...but perhaps it is not
     norm = plt.Normalize(
         vmin=normalization_array.min(), vmax=normalization_array.max()
