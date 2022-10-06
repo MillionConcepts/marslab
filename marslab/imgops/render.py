@@ -212,6 +212,9 @@ def spectop_look(
     if special_constants is not None:
         for image in images:
             mask[np.nonzero(np.isin(image, special_constants))] = True
+    for image in images:
+        if isinstance(image, np.ma.MaskedArray):
+            mask = np.logical_or(mask, image.mask)
     if threshold is not None:
         mask = np.logical_or(mask, threshold_mask(images, threshold))
     if skymask_threshold is not None:
