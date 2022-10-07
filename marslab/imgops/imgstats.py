@@ -1,7 +1,7 @@
 from functools import reduce
 import numpy as np
-from cytoolz import keyfilter, keymap
 
+from cytoolz import keyfilter, keymap
 from dustgoggles.composition import Composition
 from marslab.imgops.imgutils import nanmask, ravel_valid, zero_mask
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
@@ -19,7 +19,7 @@ def pick_mask_constructors(region):
 
 def centered_indices(array):
     y, x = np.indices(array.shape)
-    y0, x0 = array.shape[0] // 2, array.shape[1] // 2
+    y0, x0 = (array.shape[0] - 1) / 2, (array.shape[1] - 1) / 2
     return y - y0, x - x0
 
 
