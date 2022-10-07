@@ -1,11 +1,12 @@
 from functools import reduce
-import numpy as np
+from operator import truediv, floordiv
 
 from cytoolz import keyfilter, keymap
 from dustgoggles.composition import Composition
 from marslab.imgops.imgutils import nanmask, ravel_valid, zero_mask
+import numpy as np
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
-from scipy.ndimage import convolve
+from scipy.ndimage import binary_dilation, convolve
 from scipy import stats
 
 
@@ -218,6 +219,25 @@ def gradient_stats(
         return stat_dict, component_dict
     return stat_dict, {}
 
+
+def dilation_kernel(size=2, sharp=False, square=False):
+    if size < 2:
+        raise ValueError("Kernel size must be at least 2.")
+    kernel = np.ones((size, size))
+    if square is True:
+        return kernel
+    op = truediv if sharp is False else floordiv
+    distance = op(size, 2)
+    return np.ma.filled(cut_annulus(kernel, (0, distance)), 0)
+
+
+def dilate_mask(image, size=True, sharp=False, square=False, copy=True):
+    if copy is True:
+        image = image.copy()
+    image.mask = binary_dilation(
+        image.mask, structure=dilation_kernel(size, sharp, square)
+    )
+    return image
 
 def fhplot(
     array, bins=128, vrange=None, ax=None, return_counts=False, **mpl_kwargs
