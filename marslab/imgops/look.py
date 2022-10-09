@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Collection, Any
 
 from dustgoggles.composition import Composition
+from dustgoggles.func import argstop
 
 import marslab.spectops
 from marslab.imgops.imgutils import map_filter, crop_all
@@ -67,9 +68,9 @@ def interpret_prefilter_step(chunk):
     return step, chunk.get("params", {})
 
 
-def interpret_overlay_step(chunk):
-    from marslab.imgops.render import render_overlay
-    return render_overlay, chunk.get("params", {})
+def interpret_mask_step(chunk):
+    from marslab.imgops.imgutils import extract_masks
+    return extract_masks, chunk
 
 
 def interpret_instruction_step(
@@ -91,11 +92,11 @@ def interpret_instruction_step(
         return interpret_crop_step(chunk)
     if step_name == "prefilter":
         return interpret_prefilter_step(chunk)
-    if step_name == "overlay":
-        return interpret_overlay_step(chunk)
+    if step_name == "mask":
+        return interpret_mask_step(chunk)
     # specifying a function is mandatory,
     # specifying bound parameters is not
-    return chunk["function"], chunk.get("params", {})
+    return chunk["function"], chunk.get("params", {}).copy()
 
 
 class Look(Composition, ABC):
@@ -114,9 +115,6 @@ class Look(Composition, ABC):
         if (self.metadata is not None) or (self.special_constants is not None):
             self.populate_kwargs()
 
-        # from marslab.imgops.imgutils import threshold_mask
-        # self.add_send("crop", partial(threshold_mask, percentiles=(5, 100)), "render", "threshold_mask")
-
     def _add_wavelengths(self, wavelengths: Sequence[float]):
         look = self.steps["look"]
         if "__name__" in dir(look):
@@ -128,20 +126,21 @@ class Look(Composition, ABC):
         self.add_insert("look", "wavelengths", wavelengths)
         return True
 
-    def _add_underlay(self, underlay: "np.ndarray"):
-        if "overlay" not in self.index:
-            return False
+    def _get_plotter_layers(self):
+        try:
+            return self.inserts['plotter']['layers']
+        except KeyError:
+            self.add_insert('plotter', 'layers', [])
+            return self._get_plotter_layers()
+
+    def add_underlay(self, underlay: "np.ndarray", layer_ix: int = -1):
         if "crop" in self.steps:
             underlay = self.steps["crop"](
                 underlay, **self.inserts.get('crop', {})
             )
-        self.add_insert("overlay", "base_image", underlay)
-
-    def _bind_special_runtime_kwargs(self, special_kwargs: Mapping):
-        if special_kwargs.get("base_image") is not None:
-            self._add_underlay(special_kwargs["base_image"])
-        if special_kwargs.get("wavelengths") is not None:
-            self._add_wavelengths(special_kwargs["wavelengths"])
+        self._get_plotter_layers().append(
+            {'layer_ix': layer_ix, "image": underlay}
+        )
 
     @classmethod
     def compile_from_instruction(
@@ -150,18 +149,15 @@ class Look(Composition, ABC):
         metadata: "pd.DataFrame" = None,
         special_constants: Collection[Any] = None
     ):
-        """
-        compile a look instruction into a rendering pipeline
-        """
-        # all of cropper, pre, post, overlay, plotter can potentially be
-        # absent. these are _possible_ steps in the pipeline.
+        """compile a look instruction into a rendering pipeline"""
+        # only look is required. these are _possible_ steps in the pipeline.
         step_names = (
             "crop",
             "prefilter",
+            "mask",
             "look",
             "limiter",
             "postfilter",
-            "overlay",
             "plotter",
             "bang",
         )
@@ -173,13 +169,19 @@ class Look(Composition, ABC):
                 steps[step_name] = step
             if kwargs != {}:
                 inserts[step_name] = kwargs
-        return cls(
+        look = cls(
             steps,
             inserts=inserts,
             metadata=metadata,
             special_constants=special_constants,
             bands=instruction.get("bands"),
         )
+        if "mask" in steps.keys():
+            # add 'splitter'
+            # TODO -- maybe implement this at Composition level
+            look.steps['look'] = argstop(look.steps['look'], 2)
+            look.add_send('mask', lambda s: s[2], look._get_plotter_layers())
+        return look
 
     # TODO: is this excessively baroque; would an internal dispatch be better?
     def populate_kwargs(self):

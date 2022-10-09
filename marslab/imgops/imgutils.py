@@ -3,6 +3,7 @@ image processing utility functions
 """
 import gc
 import sys
+from _operator import truediv, floordiv
 from functools import partial, reduce
 from itertools import chain
 from operator import mul
@@ -12,25 +13,25 @@ from typing import (
     MutableMapping,
     Collection,
     Mapping,
-    Union
+    Union, MutableSequence,
 )
 
 from dustgoggles.structures import dig_for_values
 import numpy as np
 
 
-def absolutely_destroy(thing):
+def absolutely_destroy(thing, delay_collect=False):
     if isinstance(thing, MutableMapping):
         keys = list(thing.keys())
         for key in keys:
             del thing[key]
-    elif isinstance(thing, Sequence):
-        for _ in thing:
-            del _
+    elif isinstance(thing, MutableSequence):
+        [thing.pop() for _ in range(len(thing))]
     del thing
     if "matplotlib.pyplot" in sys.modules.keys():
         getattr(sys.modules["matplotlib.pyplot"], "close")("all")
-    gc.collect()
+    if delay_collect is False:
+        gc.collect()
 
 
 def eightbit(array, stretch=(0, 0)):
@@ -51,7 +52,7 @@ def crop(array: np.ndarray, bounds=None, **_) -> np.ndarray:
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
                 pixels[value] = pixels[value] * -1
-    return array[pixels[2]:pixels[3], pixels[0]:pixels[1]]
+    return array[pixels[2] : pixels[3], pixels[0] : pixels[1]]
 
 
 def crop_all(
@@ -82,6 +83,7 @@ def skymask(arrays: Collection[np.ndarray], percentile=75):
     mean = np.mean(np.dstack(arrays), axis=-1)
     segments = mean > np.percentile(ravel_valid(mean), percentile)
     from skimage.measure import label
+
     labels = label(segments, connectivity=1)
     return labels == 1
 
@@ -102,6 +104,7 @@ def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
         if isinstance(filtered[0], np.ma.MaskedArray):
             return np.ma.concatenate(filtered, axis=set_axis)
         return np.concatenate(filtered, axis=set_axis)
+
     return multi
 
 
@@ -190,14 +193,14 @@ def normalize_range(
     if inplace is True:
         # perform the operation in-place
         image -= minimum
-        image *= (range_max - range_min)
-        if image.dtype.char in np.typecodes['AllInteger']:
+        image *= range_max - range_min
+        if image.dtype.char in np.typecodes["AllInteger"]:
             # this loss of precision is probably better than
             # automatically typecasting it.
             # TODO: detect rollover cases, etc.
-            image //= (maximum - minimum)
+            image //= maximum - minimum
         else:
-            image /= (maximum - minimum)
+            image /= maximum - minimum
         image += range_min
         return image
     return (image - minimum) * (range_max - range_min) / (
@@ -480,3 +483,178 @@ def zero_mask(array, copy=True):
 
 def nanmask(array, copy=True):
     return setmask(array, np.nan, copy)
+
+
+def make_mask_canvas(image, unmasked_alpha=1, masked_alpha=0):
+    canvas = np.full(image.shape[:2], unmasked_alpha, dtype='float16')
+    if len(image.shape) > 2:
+        mask = image.mask.sum(axis=-1).astype(bool)
+    else:
+        mask = image.mask
+    canvas[mask] = masked_alpha
+    return canvas
+
+
+def colorfill_maskedarray(
+    masked_array: np.ma.MaskedArray,
+    color: Union[float, tuple[float, float, float]] = 0.45,
+    mask_alpha=None,
+    unmasked_alpha=None,
+):
+    """
+    masked_array: 2-D masked array or a 3-D masked array with last axis of
+    length 3. should be float normalized to 0-1.
+    color: optionally-specified RGB color or single integer for gray
+    (default medium gray).
+    if both alpha parameters are None, return a 3-D array with masked values
+    filled with color.
+    otherwise, return a 4-D array (last axis intended as an alpha plane),
+    with alpha value equal to unmasked_alpha outside the mask and masked_alpha
+    inside the mask (either defaults to 0 if not set)
+    """
+    if (mask_alpha is None) and (unmasked_alpha is not None):
+        mask_alpha = 0
+    if (unmasked_alpha is None) and (mask_alpha is not None):
+        unmasked_alpha = 0
+    if len(masked_array.shape) == 2:
+        if isinstance(color, (int, float)):
+            color = (color, color, color)
+        stack = [masked_array.filled(color[ix]) for ix in range(3)]
+        if mask_alpha is not None:
+            stack.append(
+                make_mask_canvas(masked_array, unmasked_alpha, mask_alpha)
+            )
+        return np.dstack(stack)
+    if masked_array.shape[-1] != 3:
+        raise ValueError("3-D arrays must have last axis of length = 3")
+    if isinstance(color, (int, float)):
+        stack = masked_array.filled(color)
+    else:
+        stack = np.dstack(
+            [masked_array[:, :, ix].filled(color[ix]) for ix in range(3)]
+        )
+    if mask_alpha is None:
+        return stack
+    return np.dstack(
+        [stack, make_mask_canvas(stack, unmasked_alpha, mask_alpha)]
+    )
+
+
+def extract_masks(images, instructions=None):
+    if instructions is None:
+        return images, None, []
+    passmasks, sendmasks = [], []
+    if any((inst.get("colorfill") is not None for inst in instructions)):
+        canvas = np.zeros(images[0].shape)
+    for inst in instructions:
+        do_pass, do_send = inst.get("pass", False), inst.get("send", True)
+        if (do_pass is False) and (do_send is False):
+            continue
+        func, params = inst["function"], inst["params"]
+        mask = func(images, **params)
+        if do_pass is True:
+            passmasks.append(mask)
+        if do_send is True:
+            if (color_kwargs := inst.get("colorfill")) is not None:
+                sendmasks.append(
+                    colorfill_maskedarray(
+                        np.ma.masked_array(canvas, mask), **color_kwargs
+                    )
+                )
+            else:
+                sendmasks.append(mask)
+    flatmask = (
+        None if len(passmasks) == 0 else reduce(np.logical_or, passmasks)
+    )
+    return images, flatmask, sendmasks
+
+
+def dilate_flatmask(images, size, sharp=False, square=False):
+    mask = reduce(np.logical_or, [i.mask for i in images])
+    return dilate_mask(mask, size, sharp, square)
+
+
+def dilation_kernel(size=2, sharp=False, square=False):
+    if size < 2:
+        raise ValueError("Kernel size must be at least 2.")
+    kernel = np.ones((size, size))
+    if square is True:
+        return kernel
+    op = truediv if sharp is False else floordiv
+    distance = op(size, 2)
+    return np.ma.filled(cut_annulus(kernel, (0, distance)), 0)
+
+
+def dilate_mask(image, size, sharp=False, square=False, copy=True):
+    from scipy.ndimage import binary_dilation
+
+    if not isinstance(image, np.ma.masked_array):
+        return binary_dilation(
+            image.astype(bool), structure=dilation_kernel(size, sharp, square)
+        )
+    if copy is True:
+        image = image.copy()
+    image.mask = binary_dilation(
+        image.mask, structure=dilation_kernel(size, sharp, square)
+    )
+    return image
+
+
+def pick_mask_constructors(region):
+    if region == "inner":
+        return np.ma.masked_outside, np.logical_or
+    elif region == "outer":
+        return np.ma.masked_inside, np.logical_and
+    raise ValueError(f"region={region}; region must be 'inner' or 'outer'")
+
+
+def centered_indices(array):
+    y, x = np.indices(array.shape)
+    y0, x0 = (array.shape[0] - 1) / 2, (array.shape[1] - 1) / 2
+    return y - y0, x - x0
+
+
+def radial_index(array):
+    y_ix, x_ix = centered_indices(array)
+    return np.sqrt(y_ix ** 2 + x_ix ** 2)
+
+
+def join_cut_mask(array, cut_mask, copy=True):
+    if isinstance(array, np.ma.MaskedArray):
+        if copy is True:
+            array = array.copy()
+        array.mask = np.logical_or(cut_mask, array.mask)
+    else:
+        array = np.ma.MaskedArray(array, mask=cut_mask)
+    return array
+
+
+def cut_annulus(array, bounds, region="inner", copy=True):
+    mask_method, _ = pick_mask_constructors(region)
+    distance = radial_index(array)
+    pass_min, pass_max = bounds
+    pass_min = pass_min if pass_min is not None else distance.min()
+    pass_max = pass_max if pass_max is not None else distance.max()
+    cut_mask = mask_method(distance, pass_min, pass_max).mask
+    return join_cut_mask(array, cut_mask, copy)
+
+
+def cut_rectangle(array, bounds, region="inner", center=True, copy=True):
+    mask_method, op = pick_mask_constructors(region)
+    if center is True:
+        y_dist, x_dist = centered_indices(array)
+    else:
+        y_dist, x_dist = np.indices(array.shape)
+    masks = []
+    x_bounds, y_bounds = bounds
+    for bound, dist in zip((x_bounds, y_bounds), (x_dist, y_dist)):
+        pass_min, pass_max = bound
+        pass_min = pass_min if pass_min is not None else dist.min()
+        pass_max = pass_max if pass_max is not None else dist.max()
+        masks.append(mask_method(dist, pass_min, pass_max).mask)
+    cut_mask = op(*masks)
+    return join_cut_mask(array, cut_mask, copy)
+
+
+def zerocut(*args, **kwargs):
+    return zero_mask(cut_rectangle(*args, **kwargs))

@@ -1,69 +1,13 @@
 from functools import reduce
-from operator import truediv, floordiv
 
 from cytoolz import keyfilter, keymap
 from dustgoggles.composition import Composition
-from marslab.imgops.imgutils import nanmask, ravel_valid, zero_mask
+from marslab.imgops.imgutils import nanmask, ravel_valid, cut_annulus, \
+    cut_rectangle
 import numpy as np
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
-from scipy.ndimage import binary_dilation, convolve
+from scipy.ndimage import convolve
 from scipy import stats
-
-
-def pick_mask_constructors(region):
-    if region == "inner":
-        return np.ma.masked_outside, np.logical_or
-    elif region == "outer":
-        return np.ma.masked_inside, np.logical_and
-    raise ValueError(f"region={region}; region must be 'inner' or 'outer'")
-
-
-def centered_indices(array):
-    y, x = np.indices(array.shape)
-    y0, x0 = (array.shape[0] - 1) / 2, (array.shape[1] - 1) / 2
-    return y - y0, x - x0
-
-
-def radial_index(array):
-    y_ix, x_ix = centered_indices(array)
-    return np.sqrt(y_ix ** 2 + x_ix ** 2)
-
-
-def join_cut_mask(array, cut_mask, copy=True):
-    if isinstance(array, np.ma.MaskedArray):
-        if copy is True:
-            array = array.copy()
-        array.mask = np.logical_or(cut_mask, array.mask)
-    else:
-        array = np.ma.MaskedArray(array, mask=cut_mask)
-    return array
-
-
-def cut_annulus(array, bounds, region="inner", copy=True):
-    mask_method, _ = pick_mask_constructors(region)
-    distance = radial_index(array)
-    pass_min, pass_max = bounds
-    pass_min = pass_min if pass_min is not None else distance.min()
-    pass_max = pass_max if pass_max is not None else distance.max()
-    cut_mask = mask_method(distance, pass_min, pass_max).mask
-    return join_cut_mask(array, cut_mask, copy)
-
-
-def cut_rectangle(array, bounds, region="inner", center=True, copy=True):
-    mask_method, op = pick_mask_constructors(region)
-    if center is True:
-        y_dist, x_dist = centered_indices(array)
-    else:
-        y_dist, x_dist = np.indices(array.shape)
-    masks = []
-    x_bounds, y_bounds = bounds
-    for bound, dist in zip((x_bounds, y_bounds), (x_dist, y_dist)):
-        pass_min, pass_max = bound
-        pass_min = pass_min if pass_min is not None else dist.min()
-        pass_max = pass_max if pass_max is not None else dist.max()
-        masks.append(mask_method(dist, pass_min, pass_max).mask)
-    cut_mask = op(*masks)
-    return join_cut_mask(array, cut_mask, copy)
 
 
 def pick_component(complex_array, component="both"):
@@ -110,10 +54,6 @@ def boxfilter(array, bounds, region, component, center=True):
     rect = cut_rectangle(freq_array, bounds, region, center)
     rect[rect.mask] = 0
     return space(rect.data, component)
-
-
-def zerocut(*args, **kwargs):
-    return zero_mask(cut_rectangle(*args, **kwargs))
 
 
 def recursive_cut(
@@ -219,25 +159,6 @@ def gradient_stats(
         return stat_dict, component_dict
     return stat_dict, {}
 
-
-def dilation_kernel(size=2, sharp=False, square=False):
-    if size < 2:
-        raise ValueError("Kernel size must be at least 2.")
-    kernel = np.ones((size, size))
-    if square is True:
-        return kernel
-    op = truediv if sharp is False else floordiv
-    distance = op(size, 2)
-    return np.ma.filled(cut_annulus(kernel, (0, distance)), 0)
-
-
-def dilate_mask(image, size=True, sharp=False, square=False, copy=True):
-    if copy is True:
-        image = image.copy()
-    image.mask = binary_dilation(
-        image.mask, structure=dilation_kernel(size, sharp, square)
-    )
-    return image
 
 def fhplot(
     array, bins=128, vrange=None, ax=None, return_counts=False, **mpl_kwargs

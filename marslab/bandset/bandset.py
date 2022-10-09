@@ -2,6 +2,7 @@
 defines a class for organizing and performing bulk rendering operations on
 multispectral image products
 """
+import gc
 import logging
 import os
 from collections.abc import Mapping, Callable, Collection, Sequence
@@ -301,7 +302,6 @@ class BandSet:
         pool = self.setup_pool("look")
         if pool is not None:
             log.info("... serializing arrays ...")
-        pipeline_cache = {}
         for instruction in available_instructions:
             # do we have a special name? TODO: make this more opinionated?
             op_name = instruction.get("name")
@@ -323,19 +323,20 @@ class BandSet:
                     for channel in ("red", "green", "blue")
                 }
             special_kwargs = {}
-            if instruction.get("overlay") is not None:
-                special_kwargs["base_image"] = self.get_band(
-                    instruction["overlay"]["band"]
-                ).copy()
             # make processing pipeline from instruction
-            # all of cropper, pre, post, overlay can potentially be absent --
-            # these are _possible_ steps in the pipeline. note that wavelengths
-            # for spectops are added automagically by the Look compiler.
+            # note that wavelengths for spectops are added automagically by
+            # the Look compiler.
             pipeline = Look.compile_from_instruction(
                 instruction,
                 metadata=self.metadata,
                 special_constants=self.special_constants
             )
+            if "underlay" in instruction.keys():
+                underlay = instruction['underlay']['band']
+                if isinstance(underlay, int):
+                    pipeline.add_underlay(op_images[underlay])
+                else:
+                    pipeline.add_underlay(self.get_band(underlay))
             if pool is not None:
                 look_cache[op_name] = pool.apipe(
                     pipeline.execute, op_images, **special_kwargs
@@ -358,13 +359,14 @@ class BandSet:
             return
         if what is None:
             for cache_name in self.cache_names:
-                absolutely_destroy(getattr(self, cache_name))
+                absolutely_destroy(getattr(self, cache_name), True)
                 setattr(self, cache_name, {})
         elif what in self.cache_names:
-            absolutely_destroy(getattr(self, what))
+            absolutely_destroy(getattr(self, what), True)
             setattr(self, what, {})
         else:
             raise ValueError(str(what) + " is not a valid cache type.")
+        gc.collect()
 
     @staticmethod
     def write_plain_image(look, look_name, outpath, pool, prefix, results):

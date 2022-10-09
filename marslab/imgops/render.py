@@ -3,9 +3,9 @@ inline rendering functions for look pipelines. can also be called on their own.
 """
 
 import io
-from itertools import repeat
+from itertools import repeat, chain
 from functools import reduce
-from typing import Union, Optional, Sequence, Collection
+from typing import Union, Optional, Sequence
 
 import matplotlib as mpl
 import matplotlib.cm as cm
@@ -13,6 +13,7 @@ import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+from dustgoggles.structures import separate_by
 from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
@@ -29,11 +30,9 @@ from marslab.imgops.pltutils import (
 
 def decorrelation_stretch(
     channels: Sequence[np.ndarray],
+    flat_mask=None,
     contrast_stretch: Optional[Union[Sequence[float], float]] = None,
-    special_constants: Optional[Collection[float]] = None,
     sigma: Optional[float] = 1,
-    threshold: Optional[tuple[float, float]] = None,
-    skymask_threshold: Optional[float] = None,
     mask_fill_tone=None
 ):
     """
@@ -60,31 +59,22 @@ def decorrelation_stretch(
     stretch.
     """
     working_array = np.dstack(channels)
-    if special_constants is not None:
-        working_array = np.ma.masked_where(
-            np.isin(working_array, special_constants), working_array
-        )
-    else:
-        working_array = np.ma.masked_array(working_array)
-    if threshold is not None:
-        tmask = threshold_mask(channels, threshold)
-        tmask = np.dstack([tmask for _ in range(3)])
-        working_array.mask = np.logical_or(
-            working_array.mask, tmask
-        )
-    if skymask_threshold is not None:
-        smask = skymask(channels, skymask_threshold)
-        smask = np.dstack([smask for _ in range(3)])
-        working_array.mask = np.logical_or(
-            working_array.mask, smask
-        )
+    if flat_mask is not None:
+        flat_mask = np.dstack([flat_mask] * 3)
+        if not isinstance(working_array, np.ma.MaskedArray):
+            working_array = np.ma.masked_array(working_array, mask=flat_mask)
+        else:
+            working_array.mask += flat_mask
     input_shape = working_array.shape
     channel_vectors = working_array.reshape(-1, input_shape[-1])
     if channel_vectors.dtype not in [np.float32, np.float64]:
         working_dtype = np.float32
     else:
         working_dtype = channel_vectors.dtype
-    if (cmask := channel_vectors.mask).size > 1:
+    if (
+        isinstance(channel_vectors, np.ma.MaskedArray)
+        and (cmask := channel_vectors.mask).size > 1
+    ):
         selector = cmask[:, 0] | cmask[:, 1] | cmask[:, 2]
         valid_vectors = channel_vectors[~selector]
     else:
@@ -123,15 +113,18 @@ def decorrelation_stretch(
         + offset
     )
     dcs_array = dcs_vectors.reshape(input_shape)
-
     # special limiter included ensuite
     if contrast_stretch is None:
         image = normalize_range(dcs_array)
     else:
         image = enhance_color(dcs_array, (0, 1), contrast_stretch)
-    if mask_fill_tone is not None:
+    if (
+        isinstance(working_array, np.ma.MaskedArray)
+        and (mask_fill_tone is not None)
+    ):
         image[working_array.mask] = mask_fill_tone
     return image
+
 
 def render_overlay(
     overlay_image,
@@ -212,30 +205,18 @@ def render_rgb_composite(channels, *, special_constants=None):
 
 def spectop_look(
     images,
+    flat_mask=None,
     *,
     spectop=None,
     wavelengths=None,
-    special_constants=None,
-    threshold: Optional[tuple[float, float]] = None,
-    skymask_threshold: Optional[float] = None
 ):
-    mask = np.full(images[0].shape, False, bool)
-    if special_constants is not None:
-        for image in images:
-            mask[np.nonzero(np.isin(image, special_constants))] = True
-    if threshold is not None:
-        mask = np.logical_or(mask, threshold_mask(images, threshold))
-    if skymask_threshold is not None:
-        mask = np.logical_or(mask, skymask(images, skymask_threshold))
-    try:
-        look = spectop(images, None, wavelengths)[0]
-        if isinstance(look, np.ma.MaskedArray):
-            look.mask += mask
-        else:
-            look = np.ma.MaskedArray(look, mask=mask)
-    except AssertionError:
-        # print(f"spectop is {spectop}, wavelengths are {wavelengths}")
-        raise
+    look = spectop(images, None, wavelengths)[0]
+    if flat_mask is None:
+        return look
+    if isinstance(look, np.ma.MaskedArray):
+        look.mask += flat_mask
+    else:
+        look = np.ma.MaskedArray(look, mask=flat_mask)
     return look
 
 
@@ -308,14 +289,31 @@ def make_thumbnail(
 #  becoming hacky -- maybe solve it more consistently with masks?:
 def colormapped_plot(
     array: np.ndarray,
-    *,
     cmap=None,
     render_colorbar=False,
     no_ticks=True,
     colorbar_fp=None,
     special_constants=None,
+    mask_fill_color=0.45,
+    drop_mask=True,
+    alpha=None,
+    layers=None
 ):
-    """generate a colormapped plot, optionally with colorbar, from 2D array"""
+    """
+    generate a colormapped plot, optionally with colorbar, from 2D array.
+    render as many overlays and underlays as you like.
+    layers may either be ndarrays, dicts of the format:
+    {'layer_ix': int, 'image': np.ndarray},
+    (where the colormapped array is always at layer_ix 0),
+    or lists or tuples of the same.
+    ndarrays without a layer_ix field will always be treated as overlays,
+    rendered in argument order after the layer with the highest specified
+    layer_ix.
+    3D layers will be treated as RGB(A); 2D layers will be treated as
+    grayscale.
+    Note that if opacity is not set and cmap doesn't define any
+    transparency, you won't see any underlays.
+    """
     # TODO: hacky bailout if this is stuck on the end of an overlay pipeline,
     #  this can be cleaned up much more effectively
     if isinstance(array, mpl.figure.Figure):
@@ -325,33 +323,35 @@ def colormapped_plot(
         normalization_array = normalization_array[
             ~np.isin(normalization_array, special_constants)
         ]
-    # TODO: hmm, we should be using this maybe
     normalization_array = normalization_array[np.isfinite(normalization_array)]
     # this now should be using masks appropriately...but perhaps it is not
     norm = plt.Normalize(
         vmin=normalization_array.min(), vmax=normalization_array.max()
     )
     del normalization_array
+    if isinstance(array, np.ma.masked_array):
+        if drop_mask is True:
+            array = array.data
+        else:
+            array = array.filled(mask_fill_color)
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)
     if cmap is None:
         cmap = cm.get_cmap("Greys_r")
-    # if drop_mask_for_display:
-    #     array = array.data
-    # TODO: this probably remains hacky...but it might not
-    #  if it isn't we might want a _separate mask_
-    #  for things like partials etc.
-    # array[np.isin(array, special_constants)] = np.nan
-
     array = cmap(norm(array))
-    fig = plt.figure()
-    ax = fig.add_subplot()
-    ax.imshow(array)
+    if alpha is not None:
+        array[:, :, 3] = alpha
+    if layers is not None:
+        fig, ax = flatten_layers(
+            list(layers) + [{'layer_ix': 0, 'image': array}]
+        )
+    else:
+        fig, ax = plt.subplots()
+        ax.imshow(array)
     if render_colorbar:
         cax = attach_axis(ax, size="3%", pad="0.5%")
         colorbar = plt.colorbar(
-            cm.ScalarMappable(norm=norm, cmap=cmap),
-            cax=cax,
+            cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax
         )
         if colorbar_fp:
             set_colorbar_font(colorbar, colorbar_fp)
@@ -360,16 +360,39 @@ def colormapped_plot(
     return fig
 
 
+def flatten_layers(layers, **imshow_kwargs):
+    fig, ax = plt.subplots()
+    seq, single = separate_by(layers, lambda l: isinstance(l, (tuple, list)))
+    layers = list(chain.from_iterable(seq)) + single
+    dicts, arrays = separate_by(layers, lambda l: isinstance(l, dict))
+    order = [d.get('layer_ix') for d in dicts]
+    assert len(set(order)) == len(order)
+    dicts.sort(key=lambda d: d.get('layer_ix'))
+    for image in list(map(lambda d: d.get('image'), dicts)) + arrays:
+        if len(image.shape) != 3:
+            image = cm.get_cmap('Greys_r')(image)
+        ax.imshow(image, **imshow_kwargs)
+    return fig, ax
+
+
 def simple_figure(
-    image: Union[ArrayLike, Image.Image], zero_mask=True, **imshow_kwargs
+    image: Union[ArrayLike, Image.Image],
+    zero_mask=True,
+    layers=None,
+    **imshow_kwargs
 ) -> mpl.figure.Figure:
     """
-    wrap an array up in a matplotlib subplot and not much else
+    wrap an array + optional layers up in a matplotlib subplot
     """
     if (zero_mask is True) and isinstance(image, np.ma.MaskedArray):
         image = np.ma.filled(image, 0)
-    fig, ax = plt.subplots()
-    ax.imshow(image, **imshow_kwargs)
+    if layers is not None:
+        fig, ax = flatten_layers(
+            list(layers) + [{'layer_ix': 0, 'image': image}], **imshow_kwargs
+        )
+    else:
+        fig, ax = plt.subplots()
+        ax.imshow(image, **imshow_kwargs)
     strip_axes(ax)
     return fig
 
