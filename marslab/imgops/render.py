@@ -126,54 +126,6 @@ def decorrelation_stretch(
     return image
 
 
-def render_overlay(
-    overlay_image,
-    base_image,
-    *,
-    overlay_cmap=cm.get_cmap("viridis"),
-    base_cmap=cm.get_cmap("Greys_r"),
-    overlay_opacity=0.5,
-    fill_mask=True,
-    colorbar_fp=None
-):
-    """
-    TODO: this is a bit of a hack. consider finding a cleaner way to do the
-      compositing without necessarily returning a Figure, even if mpl is used
-      as an intermediate step sometimes -- although to later make a colorbar
-      correctly, if there is no ScalarMappable, range state will have to be
-      stored separately, which is ugly and circuitous. so maybe no intermediate
-      possibility, or at least intent
-    """
-    norm = plt.Normalize(vmin=overlay_image.min(), vmax=overlay_image.max())
-    fig = plt.figure()
-    ax = fig.add_subplot()
-    if isinstance(base_cmap, str):
-        base_cmap = cm.get_cmap(base_cmap)
-    if isinstance(overlay_cmap, str):
-        overlay_cmap = cm.get_cmap(overlay_cmap)
-    base = base_cmap(normalize_range(base_image))
-    overlay = overlay_cmap(norm(overlay_image))
-    blend_array = np.full(base_image.shape, overlay_opacity)
-    if fill_mask is True:
-        blend_array = np.where(
-            overlay_image.mask, np.zeros(base_image.shape), blend_array
-        )
-    base[:, :, 3] = 1 - blend_array
-    overlay[:, :, 3] = blend_array
-    ax.imshow(base)
-    ax.imshow(overlay)
-    strip_axes(ax)
-    cax = attach_axis(ax, size="3%", pad="0.5%")
-    colorbar = plt.colorbar(
-        cm.ScalarMappable(norm=norm, cmap=overlay_cmap),
-        alpha=overlay_opacity,
-        cax=cax,
-    )
-    if colorbar_fp is not None:
-        set_colorbar_font(colorbar, colorbar_fp)
-    return fig
-
-
 # TODO: I think masking in this is too late and we should be doing it up
 #  front, adding an optional median fill step for cases where we might have
 #  undesirable white pixels everywhere or whatever.
