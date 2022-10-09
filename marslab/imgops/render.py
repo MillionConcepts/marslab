@@ -1,10 +1,9 @@
 """
 inline rendering functions for look pipelines. can also be called on their own.
 """
-
 import io
-from itertools import repeat, chain
 from functools import reduce
+from itertools import repeat, chain
 from typing import Union, Optional, Sequence
 
 import matplotlib as mpl
@@ -17,9 +16,7 @@ from dustgoggles.structures import separate_by
 from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import (
-    normalize_range, eightbit, enhance_color, threshold_mask, skymask
-)
+from marslab.imgops.imgutils import normalize_range, eightbit, enhance_color
 from marslab.imgops.pltutils import (
     set_colorbar_font,
     get_mpl_image,
@@ -33,7 +30,7 @@ def decorrelation_stretch(
     flat_mask=None,
     contrast_stretch: Optional[Union[Sequence[float], float]] = None,
     sigma: Optional[float] = 1,
-    mask_fill_tone=None
+    mask_fill_tone=None,
 ):
     """
     decorrelation stretch of passed array on last axis of array. see
@@ -118,9 +115,8 @@ def decorrelation_stretch(
         image = normalize_range(dcs_array)
     else:
         image = enhance_color(dcs_array, (0, 1), contrast_stretch)
-    if (
-        isinstance(working_array, np.ma.MaskedArray)
-        and (mask_fill_tone is not None)
+    if isinstance(working_array, np.ma.MaskedArray) and (
+        mask_fill_tone is not None
     ):
         image[working_array.mask] = mask_fill_tone
     return image
@@ -249,7 +245,7 @@ def colormapped_plot(
     mask_fill_color=0.45,
     drop_mask=True,
     alpha=None,
-    layers=None
+    layers=None,
 ):
     """
     generate a colormapped plot, optionally with colorbar, from 2D array.
@@ -295,7 +291,7 @@ def colormapped_plot(
         array[:, :, 3] = alpha
     if layers is not None:
         fig, ax = flatten_layers(
-            list(layers) + [{'layer_ix': 0, 'image': array}]
+            list(layers) + [{"layer_ix": 0, "image": array}]
         )
     else:
         fig, ax = plt.subplots()
@@ -317,12 +313,12 @@ def flatten_layers(layers, **imshow_kwargs):
     seq, single = separate_by(layers, lambda l: isinstance(l, (tuple, list)))
     layers = list(chain.from_iterable(seq)) + single
     dicts, arrays = separate_by(layers, lambda l: isinstance(l, dict))
-    order = [d.get('layer_ix') for d in dicts]
+    order = [d.get("layer_ix") for d in dicts]
     assert len(set(order)) == len(order)
-    dicts.sort(key=lambda d: d.get('layer_ix'))
-    for image in list(map(lambda d: d.get('image'), dicts)) + arrays:
+    dicts.sort(key=lambda d: d.get("layer_ix"))
+    for image in list(map(lambda d: d.get("image"), dicts)) + arrays:
         if len(image.shape) != 3:
-            image = cm.get_cmap('Greys_r')(image)
+            image = cm.get_cmap("Greys_r")(image)
         ax.imshow(image, **imshow_kwargs)
     return fig, ax
 
@@ -331,7 +327,7 @@ def simple_figure(
     image: Union[ArrayLike, Image.Image],
     zero_mask=True,
     layers=None,
-    **imshow_kwargs
+    **imshow_kwargs,
 ) -> mpl.figure.Figure:
     """
     wrap an array + optional layers up in a matplotlib subplot
@@ -340,7 +336,7 @@ def simple_figure(
         image = np.ma.filled(image, 0)
     if layers is not None:
         fig, ax = flatten_layers(
-            list(layers) + [{'layer_ix': 0, 'image': image}], **imshow_kwargs
+            list(layers) + [{"layer_ix": 0, "image": image}], **imshow_kwargs
         )
     else:
         fig, ax = plt.subplots()
@@ -359,6 +355,7 @@ def render_nested_rgb_composite(
 ):
     # TODO: is there a cleaner way to handle this import?
     from marslab.imgops.look import Look
+
     rendered_channels = {}
     for channel, instruction in channel_instructions.items():
         pipeline = Look.compile_from_instruction(
