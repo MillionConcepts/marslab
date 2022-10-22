@@ -6,8 +6,8 @@ from marslab.imgops.imgutils import nanmask, ravel_valid, cut_annulus, \
     cut_rectangle
 import numpy as np
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
-from scipy.ndimage import convolve
 from scipy import stats
+from scipy.ndimage import convolve, sobel
 
 
 def pick_component(complex_array, component="both"):
@@ -97,11 +97,15 @@ def autocompare(image, copy=True):
     for kernel in neighbor_kernels():
         edge_results.append((convolve(canvas, kernel)))
     del canvas
-    values = ravel_valid(np.concatenate(edge_results))
-    abs_values = np.abs(values)
+    edge_values = np.abs(ravel_valid(np.concatenate(edge_results)))
     statistics |= {
-        "edge_mean_abs": np.mean(abs_values),
-        "edge_std_abs": np.std(abs_values),
+        "edge_mean_abs": np.mean(edge_values),
+        "edge_std_abs": np.std(edge_values),
+    }
+    sobel_values = np.abs(ravel_valid(sobel(image)))
+    statistics |= {
+        "sobel_mean_abs": np.mean(sobel_values),
+        "sobel_std_abs": np.std(sobel_values)
     }
     return statistics
 

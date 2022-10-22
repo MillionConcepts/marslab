@@ -91,7 +91,7 @@ def skymask(arrays: Collection[np.ndarray], percentile=75):
 def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
     """
     produce a 'split' version of a filter that applies itself to slices across
-    a particular axis -- e.g., take a gaussian blur function, return a function
+    a particular axis -- e.\g., take a gaussian blur function, return a function
     that applies a gaussian blur to R / G / B channels separately and then
     recomposes them
     """
