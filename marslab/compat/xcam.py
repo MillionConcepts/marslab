@@ -534,9 +534,8 @@ def count_rois_on_xcam_images(
             )
 
     roi_frame = pd.DataFrame(roi_listing)
-    roi_frame.loc[:, numeric_columns(roi_frame)] = roi_frame.loc[
-        :, numeric_columns(roi_frame)
-    ].astype(np.float32)
+    for column in numeric_columns(roi_frame):
+        roi_frame[column] = roi_frame[column].astype(np.float32)
     cubestat_frame = roi_frame.copy()
     cubestats = []
     for eye in ("LEFT", "RIGHT"):

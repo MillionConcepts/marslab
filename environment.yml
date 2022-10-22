@@ -9,7 +9,6 @@ dependencies:
   - git
   - clize
   - pip
-  - pvl
   - python-Levenshtein
   - scipy
   - fs

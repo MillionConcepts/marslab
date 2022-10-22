@@ -4,10 +4,12 @@ from setuptools import setup, find_packages
 # hooks. we do not recommend using this file to install
 # marslab or its dependencies. please use conda along with
 # the provided environment.yml file.
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setup(
     name="marslab",
-    version="0.9.8",
+    version="0.9.10",
     url="https://github.com/millionconcepts/marslab.git",
     author="Million Concepts",
     author_email="chase@millionconcepts.com",

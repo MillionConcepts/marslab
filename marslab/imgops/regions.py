@@ -33,7 +33,7 @@ def roi_stats(array, extended=True):
             "count": vals.size,
             "skew": skew(vals),
             "kurtosis": kurtosis(vals),
-            "mode": mode(vals),
+            "mode": mode(vals, keepdims=True),
             "median": np.ma.median(vals),
         }
     return base
