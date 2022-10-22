@@ -12,12 +12,11 @@ from types import MappingProxyType
 from typing import Optional
 
 import numpy as np
-import pandas.api.types
 import pandas as pd
+import pandas.api.types
+from cytoolz import merge
 from dustgoggles.pivot import split_on
-from dustgoggles.structures import listify, enumerate_as_mapping
 from more_itertools import windowed
-
 
 WAVELENGTH_TO_FILTER = {
     "CCAM": {
@@ -421,6 +420,14 @@ def numeric_columns(data: pd.DataFrame) -> list[str]:
     ]
 
 
+def squeeze_roi_dict(roi_dict, on='COLOR'):
+    roi_dict = {
+        value: merge([rec for rec in roi_dict if rec[on] == value])
+        for value in set(rec[on] for rec in roi_dict)
+    }
+    return pd.DataFrame.from_dict(roi_dict, 'index')
+
+
 # TODO: way too huge and messy.
 def count_rois_on_xcam_images(
     roi_hdulist: list,
@@ -569,18 +576,10 @@ def count_rois_on_xcam_images(
                     f"{eye}_DET_THETA": position["theta"],
                 }
             )
-    cubestats = cubestats.copy()
+    cubestats = squeeze_roi_dict(cubestats)
+    roi_listing = squeeze_roi_dict(roi_listing).drop(columns='COLOR')
     # note pivoting automatically destroys any columns with arraylikes
-    base_df = (
-        pd.concat(
-            [
-                pd.DataFrame(cubestats),
-                pd.DataFrame(roi_listing),
-            ]
-        )
-        .pivot_table(columns=["COLOR"])
-        .T.reset_index()
-    )
+    base_df = pd.concat([cubestats, roi_listing], axis=1).copy().reset_index(drop=True)
     measures = ("ROW", "COLUMN", "DET_RAD", "DET_THETA")
     for measure in measures:
         base_df[measure] = np.nan
@@ -595,9 +594,8 @@ def count_rois_on_xcam_images(
             base_df.loc[ix, measure] = np.mean(
                 [row[ocular] for ocular in oculars]
             )
-    # copying to defragment
     downcast = base_df[numeric_columns(base_df)].astype(np.float32)
-    base_df.loc[:, numeric_columns(base_df)] = downcast.values
+    base_df[numeric_columns(base_df)] = downcast.values
     # enter nan columns for err and mean only -- this is a format
     # standardization choice
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
@@ -605,7 +603,7 @@ def count_rois_on_xcam_images(
             base_df[filter_name] = np.nan
             base_df[filter_name + "_STD"] = np.nan
             base_df[filter_name + "_ERR"] = np.nan
-    return base_df
+    return base_df.copy()
 
 
 # standard translations between eye codes and names
