@@ -79,8 +79,18 @@ def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
     return reduce(np.logical_and, masks)
 
 
-def skymask(arrays: Collection[np.ndarray], percentile=75):
-    mean = np.mean(np.dstack(arrays), axis=-1)
+def skymask(arrays: Collection[np.ndarray], percentile=75, dilate=None):
+
+    if all([isinstance(a, np.ma.MaskedArray) for a in arrays]):
+        if dilate is not None:
+            mask = flatmask(arrays, size=dilate)
+        else:
+            mask = reduce(np.logical_or, [a.mask for a in arrays])
+        mean = np.ma.MaskedArray(
+            np.mean(np.dstack(arrays), axis=-1), mask=mask
+        )
+    else:
+        mean = np.ma.mean(np.ma.dstack(arrays), axis=-1)
     segments = mean > np.percentile(ravel_valid(mean), percentile)
     from skimage.measure import label
 
@@ -576,9 +586,16 @@ def extract_masks(images, instructions=None):
     return images, flatmask, sendmasks
 
 
-def dilate_flatmask(images, size, sharp=False, square=False):
-    mask = reduce(np.logical_or, [i.mask for i in images])
-    return dilate_mask(mask, size, sharp, square)
+def flatmask(images, dilate=None, sharp=False, square=False):
+    mask = reduce(
+        np.logical_or,
+        [i.mask for i in images if isinstance(i, np.ma.MaskedArray)]
+    )
+    if len(mask) == 0:
+        return np.full(images[0].shape, False)
+    if dilate is not None:
+        # noinspection PyTypeChecker
+        return dilate_mask(mask, dilate, sharp, square)
 
 
 def dilation_kernel(size=2, sharp=False, square=False):
@@ -595,7 +612,7 @@ def dilation_kernel(size=2, sharp=False, square=False):
 def dilate_mask(image, size, sharp=False, square=False, copy=True):
     from scipy.ndimage import binary_dilation
 
-    if not isinstance(image, np.ma.masked_array):
+    if not isinstance(image, np.ma.MaskedArray):
         return binary_dilation(
             image.astype(bool), structure=dilation_kernel(size, sharp, square)
         )

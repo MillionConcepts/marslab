@@ -119,6 +119,8 @@ def decorrelation_stretch(
         mask_fill_tone is not None
     ):
         image[working_array.mask] = mask_fill_tone
+    # else:
+    #     image = image.data
     return image
 
 
@@ -267,6 +269,8 @@ def colormapped_plot(
     if isinstance(array, mpl.figure.Figure):
         return array
     normalization_array = array.copy()
+    if isinstance(array, np.ma.masked_array):
+        normalization_array = normalization_array[~normalization_array.mask]
     if special_constants is not None:
         normalization_array = normalization_array[
             ~np.isin(normalization_array, special_constants)
