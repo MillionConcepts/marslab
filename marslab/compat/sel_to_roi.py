@@ -21,7 +21,7 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
     """
     # TODO: scipy.io.readsav does not close the buffer correctly
     #  on finding an invalid signature.
-    with warnings.catch_warnings:
+    with warnings.catch_warnings():
         warnings.simplefilter("ignore", ResourceWarning)
         try:
             sel = scipy.io.readsav(roi_path)
