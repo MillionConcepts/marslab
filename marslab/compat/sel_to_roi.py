@@ -1,6 +1,7 @@
 """
 functions for handling the MERtools .sel format
 """
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Union
@@ -18,34 +19,38 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
     """
     is this file a MERSpect .sel file?
     """
-    try:
-        sel = scipy.io.readsav(roi_path)
-        assert set(sel.keys()).issubset(
-            {
-                "erasecolor",
-                "lseltemp",
-                "rseltemp",
-                "region_info",
-                "left_pos",
-                "right_pos",
-                "sel_file_format_major_version",
-                "sel_file_format_minor_version",
-                "sel_file_format_date"
-            }
-        )
-        return True
-    except AssertionError:
-        # this is apparently an IDL .sav file, but not a properly-formatted
-        # .sel file
-        return False
-    # scipy.io.readsav uses general Exception
-    except Exception as exception:
-        if "Invalid SIGNATURE" in str(exception):
-            # this is not an IDL .sav file but rather something else
+    # TODO: scipy.io.readsav does not close the buffer correctly
+    #  on finding an invalid signature.
+    with warnings.catch_warnings:
+        warnings.simplefilter("ignore", ResourceWarning)
+        try:
+            sel = scipy.io.readsav(roi_path)
+            assert set(sel.keys()).issubset(
+                {
+                    "erasecolor",
+                    "lseltemp",
+                    "rseltemp",
+                    "region_info",
+                    "left_pos",
+                    "right_pos",
+                    "sel_file_format_major_version",
+                    "sel_file_format_minor_version",
+                    "sel_file_format_date"
+                }
+            )
+            return True
+        except AssertionError:
+            # this is apparently an IDL .sav file, but not a
+            # properly-formatted .sel file
             return False
-        # presumably FileNotFoundError, you passed an integer, stuff like that
-        raise
-
+        # scipy.io.readsav uses general Exception
+        except Exception as exception:
+            if "Invalid SIGNATURE" in str(exception):
+                # this is not an IDL .sav file but rather something else
+                return False
+            # presumably FileNotFoundError, you passed an integer, stuff
+            # like that
+            raise
 
 def roi_color_ix_to_color_name(color_ix: int, instrument: str = "MCAM") -> str:
     """

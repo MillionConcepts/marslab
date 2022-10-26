@@ -596,6 +596,7 @@ def count_rois_on_xcam_images(
             )
     downcast = base_df[numeric_columns(base_df)].astype(np.float32)
     base_df[numeric_columns(base_df)] = downcast.values
+    base_df = base_df.copy()
     # enter nan columns for err and mean only -- this is a format
     # standardization choice
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():

@@ -26,7 +26,6 @@ def parse_mcam_fn(mcam_fn):
 
 MCAM_METADATA_REGEX = MappingProxyType(
     {
-        "FILTER": r"FILTER_NAME.*MASTCAM_([LR]\d)(?=_)",
         "CSEQ": r"COMMAND_SEQUENCE_NUMBER.*?(\d+)",
         "SOL": r"(?<=PLANET_DAY_NUMBER).*?(\d+)",
     }
