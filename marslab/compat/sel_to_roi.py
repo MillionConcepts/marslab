@@ -52,6 +52,7 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
             # like that
             raise
 
+
 def roi_color_ix_to_color_name(color_ix: int, instrument: str = "MCAM") -> str:
     """
     convert MERSpect ROI color index to color name
