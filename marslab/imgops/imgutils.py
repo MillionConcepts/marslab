@@ -79,16 +79,10 @@ def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
     return reduce(np.logical_and, masks)
 
 
-def skymask(arrays: Collection[np.ndarray], percentile=75, dilate=None):
+def skymask(arrays: Collection[np.ndarray], percentile=75, dilate_mean=None):
 
     if all([isinstance(a, np.ma.MaskedArray) for a in arrays]):
-        if dilate is not None:
-            mask = flatmask(arrays, size=dilate)
-        else:
-            mask = reduce(np.logical_or, [a.mask for a in arrays])
-        mean = np.ma.MaskedArray(
-            np.mean(np.dstack(arrays), axis=-1), mask=mask
-        )
+        mean = _flat_masked_mean(arrays, dilate_mean)
     else:
         mean = np.ma.mean(np.ma.dstack(arrays), axis=-1)
     segments = mean > np.percentile(ravel_valid(mean), percentile)
@@ -96,6 +90,21 @@ def skymask(arrays: Collection[np.ndarray], percentile=75, dilate=None):
 
     labels = label(segments, connectivity=1)
     return labels == 1
+
+
+def clip_unmasked(array: np.ma.MaskedArray):
+    return np.clip(array.data, array.min(), array.max())
+
+
+def _flat_masked_mean(arrays, dilate):
+    if dilate is not None:
+        mask = flatmask(arrays, dilate=dilate)
+    else:
+        mask = reduce(np.logical_or, [a.mask for a in arrays])
+    mean = np.ma.MaskedArray(
+        np.mean(np.dstack(arrays), axis=-1), mask=mask
+    )
+    return mean
 
 
 def split_filter(filter_function: Callable, axis: int = -1) -> Callable:

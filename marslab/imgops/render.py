@@ -16,7 +16,8 @@ from dustgoggles.structures import separate_by
 from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import normalize_range, eightbit, enhance_color
+from marslab.imgops.imgutils import normalize_range, eightbit, enhance_color, \
+    clip_unmasked, colorfill_maskedarray
 from marslab.imgops.pltutils import (
     set_colorbar_font,
     get_mpl_image,
@@ -118,12 +119,8 @@ def decorrelation_stretch(
         image = normalize_range(dcs_array)
     else:
         image = enhance_color(dcs_array, (0, 1), contrast_stretch)
-    if isinstance(working_array, np.ma.MaskedArray) and (
-        mask_fill_tone is not None
-    ):
-        image[working_array.mask] = mask_fill_tone
-    # else:
-    #     image = image.data
+    if (isinstance(image, np.ma.MaskedArray)) and (mask_fill_tone is not None):
+        image = colorfill_maskedarray(image, mask_fill_tone)
     return image
 
 
