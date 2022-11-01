@@ -55,7 +55,10 @@ def decorrelation_stretch(
     decorrelation stretch). Doesn't matter if you're applying a contrast
     stretch.
     """
-    working_array = np.dstack(channels)
+    if any(isinstance(c, np.ma.MaskedArray) for c in channels):
+        working_array = np.ma.dstack(channels)
+    else:
+        working_array = np.dstack(channels)
     if flat_mask is not None:
         flat_mask = np.dstack([flat_mask] * 3)
         if not isinstance(working_array, np.ma.MaskedArray):
