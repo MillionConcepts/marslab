@@ -596,11 +596,14 @@ def extract_masks(images, instructions=None):
 
 
 def flatmask(images, dilate=None, sharp=False, square=False):
-    mask = reduce(
-        np.logical_or,
-        [i.mask for i in images if isinstance(i, np.ma.MaskedArray)]
-    )
-    if len(mask) == 0:
+    try:
+        mask = reduce(
+            np.logical_or,
+            [i.mask for i in images if isinstance(i, np.ma.MaskedArray)]
+        )
+    except TypeError as te:
+        if "empty iterable" not in str(te):
+            raise
         return np.full(images[0].shape, False)
     if dilate is not None:
         # noinspection PyTypeChecker
