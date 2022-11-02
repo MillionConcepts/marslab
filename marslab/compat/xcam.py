@@ -636,9 +636,13 @@ def aggregate_single_eye_stats(statframe, eye, rois):
 
 def aggregate_across_filters(eye, melted, roi_name, rois):
     from marslab.imgops.regions import roi_stats, roi_position
-
-    counts = roi_stats(np.hstack(melted.loc[roi_name]["value"].to_numpy()))
-    position = roi_position(rois[eye][roi_name])
+    roi = melted.loc[roi_name]["value"]
+    if isinstance(roi, pd.Series):
+        roi = np.hstack(roi.to_numpy())
+    # this performs stats twice (here and in the per-filter counting) in the
+    # degenerate case of ROIs drawn on only one filter, but this is not really
+    # a big deal.
+    counts, position = roi_stats(roi), roi_position(rois[eye][roi_name])
     base_aggregate_stat = {
         "COLOR": roi_name,
         eye: counts["mean"],
