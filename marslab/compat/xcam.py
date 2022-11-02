@@ -16,6 +16,7 @@ import pandas as pd
 import pandas.api.types
 from cytoolz import merge, valfilter
 from dustgoggles.pivot import split_on
+from marslab.imgops.regions import count_rois_on_image
 from more_itertools import windowed
 
 WAVELENGTH_TO_FILTER = {
@@ -82,6 +83,29 @@ WAVELENGTH_TO_FILTER = {
     },
 }
 
+# Scale to the effective resolution or bayer element ratio of each band
+FILTER_TO_RESOLUTION_FACTOR = {
+    "ZCAM": {
+        "L1": 1,
+        "L2": 1,
+        "L3": 1,
+        "L4": 1,
+        "L5": 2,
+        "L6": 1,
+        "R1": 1,
+        "R2": 4,
+        "R3": 4,
+        "R4": 4,
+        "R5": 4,
+        "R6": 4,
+        "L0G": 2,
+        "L0B": 1,
+        "L0R": 1,
+        "R0G": 2,
+        "R0B": 1,
+        "R0R": 1,
+    }
+}
 
 # rules currently in use:
 # set of virtual filters === the set of pairs of real filters with nominal
@@ -423,20 +447,19 @@ def numeric_columns(data: pd.DataFrame) -> list[str]:
 def filter_arrays_from(records):
     filtered = map(
         lambda rec: valfilter(lambda v: not isinstance(v, np.ndarray), rec),
-        records
+        records,
     )
     return list(filtered)
 
 
-def squeeze_roi_records(roi_recs, on="COLOR"):
-    roi_recs = {
-        value: merge([rec for rec in roi_recs if rec[on] == value])
-        for value in set(rec[on] for rec in roi_recs)
+def squeeze_records(records, on="COLOR"):
+    records = {
+        value: merge([rec for rec in records if rec[on] == value])
+        for value in set(rec[on] for rec in records)
     }
-    return pd.DataFrame.from_dict(roi_recs, "index")
+    return pd.DataFrame.from_dict(records, "index")
 
 
-# TODO: way too huge and messy.
 def count_rois_on_xcam_images(
     roi_hdulist: list,
     xcam_image_dict: dict,
@@ -456,11 +479,6 @@ def count_rois_on_xcam_images(
 
     """
     from marslab.imgops.debayer import RGGB_PATTERN, make_bayer
-    from marslab.imgops.regions import (
-        count_rois_on_image,
-        roi_stats,
-        roi_position,
-    )
 
     # unrolling for easier iteration
     roi_hdus = [roi_hdulist[hdu_ix] for hdu_ix in roi_hdulist]
@@ -482,105 +500,49 @@ def count_rois_on_xcam_images(
         bayer_masks = None
     roi_records = []
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
-        image = xcam_image_dict.get(filter_name)
-        if image is None:
+        if (image := xcam_image_dict.get(filter_name)) is None:
             continue
         # bayer-counting logic
-        if bayer_pixel_dict[filter_name] is not None:
-            detector_mask = np.full(image.shape, False)
-            bayer_pixels = bayer_pixel_dict[filter_name]
-            if isinstance(bayer_pixels, str):
-                bayer_pixels = [bayer_pixels]
-            for pixel in bayer_pixels:
-                bayer_coords = bayer_masks[pixel]
-                detector_mask[bayer_coords] = True
-        else:
-            detector_mask = np.full(image.shape, True)
+        detector_mask = make_detector_mask(
+            bayer_masks, bayer_pixel_dict, filter_name, image
+        )
         # forbidding saturated and otherwise bad pixels
-        if pixel_map_dict:
-            if filter_name[1] == "0":
-                base_pixel_map = pixel_map_dict.get(filter_name[0:2])
-            else:
-                base_pixel_map = pixel_map_dict.get(filter_name)
-            if base_pixel_map is not None:
-                # masking bad, no-signal, and saturated pixels
-                flag_mask = np.full(image.shape, True)
-                flag_mask[np.where(np.isin(base_pixel_map, [1, 2, 4]))] = False
-                detector_mask = np.logical_and(detector_mask, flag_mask)
-        eye = "LEFT" if filter_name.upper().startswith("L") else "RIGHT"
-        roi_counts = count_rois_on_image(
-            rois[eye].values(),
-            rois[eye].keys(),
+        detector_mask = apply_pixel_map(
+            detector_mask, filter_name, image, pixel_map_dict
+        )
+        roi_records += count_image(
             image,
+            filter_name,
+            rois,
             detector_mask,
+            error_map_dict,
+            FILTER_TO_RESOLUTION_FACTOR.get(instrument),
             special_constants,
         )
-        if error_map_dict:
-            ioe = np.array(error_map_dict.get(filter_name), dtype="float64")
-            error_image = ioe ** 2 - image
-
-        # Scale to the effective resolution or bayer element ratio of each band
-        FILTER_TO_RESOLUTION_FACTOR = {
-            "L1": 1,
-            "L2": 1,
-            "L3": 1,
-            "L4": 1,
-            "L5": 2,
-            "L6": 1,
-            "R1": 1,
-            "R2": 4,
-            "R3": 4,
-            "R4": 4,
-            "R5": 4,
-            "R6": 4,
-            "L0G": 2,
-            "L0B": 1,
-            "L0R": 1,
-            "R0G": 2,
-            "R0B": 1,
-            "R0R": 1,
-        }
-        for roi_name, counts in roi_counts.items():
-            roi_records.append(
-                {
-                    "COLOR": roi_name,
-                    filter_name: counts["mean"],
-                    filter_name + "_STD": counts["var"],
-                    filter_name + "_MODE": counts["mode"],
-                    # This is the wrong calculation for the error; it's just a stand-in until we clarify
-                    filter_name
-                    + "_ERR": (
-                        count_rois_on_image(
-                            rois[eye].values(),
-                            rois[eye].keys(),
-                            (
-                                error_image
-                                + counts["mean"]
-                                / (
-                                    counts["count"]
-                                    / FILTER_TO_RESOLUTION_FACTOR[filter_name]
-                                )
-                            ),
-                            detector_mask,
-                            special_constants,
-                        )[roi_name]["mean"]
-                        if error_map_dict
-                        else None
-                    ),
-                }
-                | {
-                    filter_name + "_" + stat.upper(): counts[stat]
-                    for stat in counts.keys()
-                }
-            )
-
     cube_records = aggregate_eye_stats(roi_records, rois)
-    roi_records = squeeze_roi_records(
-        filter_arrays_from(roi_records)
-    ).drop(columns="COLOR")
-    base_df = (
-        pd.concat([cube_records, roi_records], axis=1).copy().reset_index(drop=True)
+    roi_records = squeeze_records(filter_arrays_from(roi_records)).drop(
+        columns="COLOR"
     )
+    base_df = (
+        pd.concat([cube_records, roi_records], axis=1)
+        .copy()
+        .reset_index(drop=True)
+    )
+    base_df = add_position_metrics(base_df)
+    downcast = base_df[numeric_columns(base_df)].astype(np.float32)
+    base_df[numeric_columns(base_df)] = downcast.values
+    base_df = base_df.copy()
+    # enter nan columns for err and mean only -- this is a format
+    # standardization choice
+    for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
+        if filter_name not in base_df.columns:
+            base_df[filter_name] = np.nan
+            base_df[filter_name + "_STD"] = np.nan
+            base_df[filter_name + "_ERR"] = np.nan
+    return base_df.copy()
+
+
+def add_position_metrics(base_df):
     measures = ("ROW", "COLUMN", "DET_RAD", "DET_THETA")
     for measure in measures:
         base_df[measure] = np.nan
@@ -595,17 +557,109 @@ def count_rois_on_xcam_images(
             base_df.loc[ix, measure] = np.mean(
                 [row[ocular] for ocular in oculars]
             )
-    downcast = base_df[numeric_columns(base_df)].astype(np.float32)
-    base_df[numeric_columns(base_df)] = downcast.values
-    base_df = base_df.copy()
-    # enter nan columns for err and mean only -- this is a format
-    # standardization choice
-    for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
-        if filter_name not in base_df.columns:
-            base_df[filter_name] = np.nan
-            base_df[filter_name + "_STD"] = np.nan
-            base_df[filter_name + "_ERR"] = np.nan
-    return base_df.copy()
+    return base_df
+
+
+def apply_pixel_map(detector_mask, filter_name, image, pixel_map_dict):
+    if pixel_map_dict:
+        if filter_name[1] == "0":
+            base_pixel_map = pixel_map_dict.get(filter_name[0:2])
+        else:
+            base_pixel_map = pixel_map_dict.get(filter_name)
+        if base_pixel_map is not None:
+            # masking bad, no-signal, and saturated pixels
+            flag_mask = np.full(image.shape, True)
+            flag_mask[np.where(np.isin(base_pixel_map, [1, 2, 4]))] = False
+            detector_mask = np.logical_and(detector_mask, flag_mask)
+    return detector_mask
+
+
+def make_detector_mask(bayer_masks, bayer_pixel_dict, filter_name, image):
+    if bayer_pixel_dict[filter_name] is not None:
+        detector_mask = np.full(image.shape, False)
+        bayer_pixels = bayer_pixel_dict[filter_name]
+        if isinstance(bayer_pixels, str):
+            bayer_pixels = [bayer_pixels]
+        for pixel in bayer_pixels:
+            bayer_coords = bayer_masks[pixel]
+            detector_mask[bayer_coords] = True
+    else:
+        detector_mask = np.full(image.shape, True)
+    return detector_mask
+
+
+def count_image(
+    image,
+    filter_name,
+    rois,
+    detector_mask,
+    error_map_dict,
+    resolution_dict,
+    special_constants,
+):
+    eye = "LEFT" if filter_name.upper().startswith("L") else "RIGHT"
+    roi_counts = count_rois_on_image(
+        rois[eye].values(),
+        rois[eye].keys(),
+        image,
+        detector_mask,
+        special_constants,
+    )
+    if error_map_dict:
+        ioe = np.array(error_map_dict.get(filter_name), dtype="float64")
+        error_image = ioe ** 2 - image
+    else:
+        error_image = None
+    roi_records = []
+    for roi_name, counts in roi_counts.items():
+        if error_image is not None:
+            error = calculate_roi_error(
+                counts,
+                detector_mask,
+                error_image,
+                # TODO: onboard-debayered images
+                resolution_dict[filter_name],
+                rois[eye][roi_name],
+                special_constants,
+            )
+        else:
+            error = None
+        constant_stats = {
+            "COLOR": roi_name,
+            filter_name: counts["mean"],
+            filter_name + "_STD": counts["var"],
+            filter_name + "_MODE": counts["mode"],
+            filter_name + "_ERR": error,
+        }
+        variable_stats = {
+            filter_name + "_" + stat.upper(): counts[stat]
+            for stat in counts.keys()
+        }
+        roi_records.append(constant_stats | variable_stats)
+    return roi_records
+
+
+# TODO: This is the wrong calculation for the error; it's just a
+#  stand-in until we clarify
+def calculate_roi_error(
+    counts,
+    detector_mask,
+    error_image,
+    resolution_factor,
+    roi,
+    special_constants,
+):
+    from marslab.imgops.regions import count_rois_on_image
+
+    scaled_counts = counts["count"] / resolution_factor
+    errors = count_rois_on_image(
+        [roi],
+        [""],
+        error_image + counts["mean"] / scaled_counts,
+        detector_mask,
+        special_constants,
+    )
+    return tuple(errors.values())[0]["mean"]
 
 
 def aggregate_eye_stats(roi_records, rois):
@@ -615,13 +669,12 @@ def aggregate_eye_stats(roi_records, rois):
     cube_records = []
     for eye in ("LEFT", "RIGHT"):
         cube_records += aggregate_single_eye_stats(roi_frame, eye, rois)
-    cube_records = squeeze_roi_records(filter_arrays_from(cube_records))
-    return cube_records
+    return squeeze_records(filter_arrays_from(cube_records))
 
 
 def aggregate_single_eye_stats(statframe, eye, rois):
     eye_values = statframe.loc[
-         :, statframe.columns.str.match(f"{eye[0].upper()}.*VALUES.*")
+        :, statframe.columns.str.match(f"{eye[0].upper()}.*VALUES.*")
     ]
     if len(eye_values.columns) == 0:
         return []
@@ -636,6 +689,7 @@ def aggregate_single_eye_stats(statframe, eye, rois):
 
 def aggregate_across_filters(eye, melted, roi_name, rois):
     from marslab.imgops.regions import roi_stats, roi_position
+
     roi = melted.loc[roi_name]["value"]
     if isinstance(roi, pd.Series):
         roi = np.hstack(roi.to_numpy())

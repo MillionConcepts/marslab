@@ -24,6 +24,7 @@ def roi_stats(array, extended=True):
         vals = array.compressed()
     else:
         vals = array.ravel()
+    # TODO: why are we naming it "var" here and renaming it "STD" elsewhere
     base = {"mean": vals.mean(), "var": vals.std(), "values": vals}
     if extended:
         base |= {
