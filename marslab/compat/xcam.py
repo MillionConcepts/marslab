@@ -14,7 +14,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import pandas.api.types
-from cytoolz import merge
+from cytoolz import merge, valfilter
 from dustgoggles.pivot import split_on
 from more_itertools import windowed
 
@@ -408,7 +408,7 @@ def integerize(df):
         if not (notna.round() == notna).all():
             continue
         df.loc[isna.index, column] = ""
-        df.loc[notna.index, column] = notna.map('{:.0f}'.format)
+        df.loc[notna.index, column] = notna.map("{:.0f}".format)
     return df
 
 
@@ -420,12 +420,20 @@ def numeric_columns(data: pd.DataFrame) -> list[str]:
     ]
 
 
-def squeeze_roi_dict(roi_dict, on='COLOR'):
-    roi_dict = {
-        value: merge([rec for rec in roi_dict if rec[on] == value])
-        for value in set(rec[on] for rec in roi_dict)
+def filter_arrays_from(records):
+    filtered = map(
+        lambda rec: valfilter(lambda v: not isinstance(v, np.ndarray), rec),
+        records
+    )
+    return list(filtered)
+
+
+def squeeze_roi_records(roi_recs, on="COLOR"):
+    roi_recs = {
+        value: merge([rec for rec in roi_recs if rec[on] == value])
+        for value in set(rec[on] for rec in roi_recs)
     }
-    return pd.DataFrame.from_dict(roi_dict, 'index')
+    return pd.DataFrame.from_dict(roi_recs, "index")
 
 
 # TODO: way too huge and messy.
@@ -472,8 +480,7 @@ def count_rois_on_xcam_images(
         )
     else:
         bayer_masks = None
-    roi_listing = []
-
+    roi_records = []
     for filter_name in DERIVED_CAM_DICT[instrument]["filters"].keys():
         image = xcam_image_dict.get(filter_name)
         if image is None:
@@ -509,30 +516,57 @@ def count_rois_on_xcam_images(
             special_constants,
         )
         if error_map_dict:
-            ioe = np.array(error_map_dict.get(filter_name),dtype='float64')
-            error_image = ioe**2 - image
+            ioe = np.array(error_map_dict.get(filter_name), dtype="float64")
+            error_image = ioe ** 2 - image
 
         # Scale to the effective resolution or bayer element ratio of each band
         FILTER_TO_RESOLUTION_FACTOR = {
-            "L1": 1, "L2": 1, "L3": 1, "L4": 1, "L5": 2, "L6": 1,
-            "R1": 1, "R2": 4, "R3": 4, "R4": 4, "R5": 4, "R6": 4,
-            "L0G": 2, "L0B": 1, "L0R": 1, "R0G": 2, "R0B": 1, "R0R": 1,}
-
+            "L1": 1,
+            "L2": 1,
+            "L3": 1,
+            "L4": 1,
+            "L5": 2,
+            "L6": 1,
+            "R1": 1,
+            "R2": 4,
+            "R3": 4,
+            "R4": 4,
+            "R5": 4,
+            "R6": 4,
+            "L0G": 2,
+            "L0B": 1,
+            "L0R": 1,
+            "R0G": 2,
+            "R0B": 1,
+            "R0R": 1,
+        }
         for roi_name, counts in roi_counts.items():
-            roi_listing.append(
+            roi_records.append(
                 {
                     "COLOR": roi_name,
                     filter_name: counts["mean"],
                     filter_name + "_STD": counts["var"],
-                    filter_name + "_MODE": counts["mode"][0],
+                    filter_name + "_MODE": counts["mode"],
                     # This is the wrong calculation for the error; it's just a stand-in until we clarify
-                    filter_name + "_ERR": (count_rois_on_image(rois[eye].values(),rois[eye].keys(),
-                        (error_image + counts["mean"] /
-                         (counts["count"] / FILTER_TO_RESOLUTION_FACTOR[filter_name])),
-                                                              detector_mask,
-                                                              special_constants,
-                                                              )[roi_name]['mean']
-                                           if error_map_dict else None)
+                    filter_name
+                    + "_ERR": (
+                        count_rois_on_image(
+                            rois[eye].values(),
+                            rois[eye].keys(),
+                            (
+                                error_image
+                                + counts["mean"]
+                                / (
+                                    counts["count"]
+                                    / FILTER_TO_RESOLUTION_FACTOR[filter_name]
+                                )
+                            ),
+                            detector_mask,
+                            special_constants,
+                        )[roi_name]["mean"]
+                        if error_map_dict
+                        else None
+                    ),
                 }
                 | {
                     filter_name + "_" + stat.upper(): counts[stat]
@@ -540,46 +574,13 @@ def count_rois_on_xcam_images(
                 }
             )
 
-    roi_frame = pd.DataFrame(roi_listing)
-    for column in numeric_columns(roi_frame):
-        roi_frame[column] = roi_frame[column].astype(np.float32)
-    cubestat_frame = roi_frame.copy()
-    cubestats = []
-    for eye in ("LEFT", "RIGHT"):
-        eye_values = cubestat_frame[
-            [
-                c
-                for c in cubestat_frame.columns
-                if "VALUES" in c and c.startswith(eye[0].upper())
-            ]
-        ]
-        if len(eye_values.columns) == 0:
-            continue
-        eye_values.index = cubestat_frame["COLOR"]
-        melted = pd.melt(eye_values, ignore_index=False).dropna()
-        for roi_name in rois[eye].keys():
-            cube_counts = roi_stats(
-                np.hstack(melted.loc[roi_name]["value"].values)
-            )
-            position = roi_position(rois[eye][roi_name])
-            cubestats.append(
-                {
-                    eye + "_" + stat.upper(): cube_counts[stat]
-                    for stat in cube_counts.keys()
-                }
-                | {
-                    "COLOR": roi_name,
-                    eye: cube_counts["mean"],
-                    f"{eye}_ROW": position["y"],
-                    f"{eye}_COLUMN": position["x"],
-                    f"{eye}_DET_RAD": position["r"],
-                    f"{eye}_DET_THETA": position["theta"],
-                }
-            )
-    cubestats = squeeze_roi_dict(cubestats)
-    roi_listing = squeeze_roi_dict(roi_listing).drop(columns='COLOR')
-    # note pivoting automatically destroys any columns with arraylikes
-    base_df = pd.concat([cubestats, roi_listing], axis=1).copy().reset_index(drop=True)
+    cube_records = aggregate_eye_stats(roi_records, rois)
+    roi_records = squeeze_roi_records(
+        filter_arrays_from(roi_records)
+    ).drop(columns="COLOR")
+    base_df = (
+        pd.concat([cube_records, roi_records], axis=1).copy().reset_index(drop=True)
+    )
     measures = ("ROW", "COLUMN", "DET_RAD", "DET_THETA")
     for measure in measures:
         base_df[measure] = np.nan
@@ -605,6 +606,51 @@ def count_rois_on_xcam_images(
             base_df[filter_name + "_STD"] = np.nan
             base_df[filter_name + "_ERR"] = np.nan
     return base_df.copy()
+
+
+def aggregate_eye_stats(roi_records, rois):
+    roi_frame = pd.DataFrame(roi_records)
+    for column in numeric_columns(roi_frame):
+        roi_frame[column] = roi_frame[column].astype(np.float32)
+    cube_records = []
+    for eye in ("LEFT", "RIGHT"):
+        cube_records += aggregate_single_eye_stats(roi_frame, eye, rois)
+    cube_records = squeeze_roi_records(filter_arrays_from(cube_records))
+    return cube_records
+
+
+def aggregate_single_eye_stats(statframe, eye, rois):
+    eye_values = statframe.loc[
+         :, statframe.columns.str.match(f"{eye[0].upper()}.*VALUES.*")
+    ]
+    if len(eye_values.columns) == 0:
+        return []
+    eye_values.index = statframe["COLOR"]
+    melted = pd.melt(eye_values, ignore_index=False).dropna()
+    eyestats = [
+        aggregate_across_filters(eye, melted, roi_name, rois)
+        for roi_name in rois[eye].keys()
+    ]
+    return eyestats
+
+
+def aggregate_across_filters(eye, melted, roi_name, rois):
+    from marslab.imgops.regions import roi_stats, roi_position
+
+    counts = roi_stats(np.hstack(melted.loc[roi_name]["value"].to_numpy()))
+    position = roi_position(rois[eye][roi_name])
+    base_aggregate_stat = {
+        "COLOR": roi_name,
+        eye: counts["mean"],
+        f"{eye}_ROW": position["y"],
+        f"{eye}_COLUMN": position["x"],
+        f"{eye}_DET_RAD": position["r"],
+        f"{eye}_DET_THETA": position["theta"],
+    }
+    variable_aggregate_stat = {
+        f"{eye}_{stat.upper()}": counts[stat] for stat in counts.keys()
+    }
+    return base_aggregate_stat | variable_aggregate_stat
 
 
 # standard translations between eye codes and names
@@ -651,7 +697,7 @@ def construct_field_ordering(filters, fields):
         "TARGET_ELEVATION",
         "INSTRUMENT",
         "SCLK",
-        "UNITS"
+        "UNITS",
     )
     order = []
     for predecessor in initial + filters:
@@ -659,7 +705,7 @@ def construct_field_ordering(filters, fields):
             order.append(predecessor)
     stats = map(
         lambda f: str(f).replace(f"{filters[0]}_", ""),
-        filter(lambda f: str(f).startswith(f"{filters[0]}_"), fields)
+        filter(lambda f: str(f).startswith(f"{filters[0]}_"), fields),
     )
     if "STD" in stats:
         stats = ["STD"] + [s for s in stats if stats != "STD"]
