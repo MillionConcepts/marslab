@@ -24,8 +24,8 @@ def get_mpl_image(fig):
     buffer = io.BytesIO()
     # despine(ax)
     # remove_ticks(ax)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    fig.savefig(buffer, bbox_inches=extent, pad_inches=0)
+    # extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(buffer, bbox_inches="tight", pad_inches=0)
     return PIL.Image.open(buffer)
 
 
