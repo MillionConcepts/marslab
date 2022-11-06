@@ -188,6 +188,7 @@ def find_unmasked_bounds(image, cheat_low, cheat_high):
     return minimum, maximum
 
 
+# TODO: address rollover issues
 def normalize_range(
     image: np.ndarray,
     bounds: Sequence[int] = (0, 1),
