@@ -102,21 +102,21 @@ class BandSet:
                 setattr(self, mapping, {})
         self.cache_names = ("raw", "debayered", "looks")
         if self.load_method is None:
-            from marslab.imgops.loaders import rasterio_load
+            from marslab.imgops.loaders import pil_load
 
-            self.load_method = rasterio_load
+            self.load_method = pil_load
+        self.threads = {}
     # TODO: do I need to allow more of these on init? like for copying? maybe?
 
     def setup_pool(self, thread_type):
+        if self.threads.get(thread_type) is None:
+            return None
         from pathos.multiprocessing import ProcessPool
 
-        if self.threads.get(thread_type) is not None:
-            log.info("... initializing worker pool ...")
-            pool = ProcessPool(self.threads.get(thread_type))
-            pool.restart()
-            return pool
-
-        return None
+        log.info("... initializing worker pool ...")
+        pool = ProcessPool(self.threads.get(thread_type))
+        pool.restart()
+        return pool
 
     def load(
         self, bands: Collection[str], reload: bool = False, quiet: bool = False
