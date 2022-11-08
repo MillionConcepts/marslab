@@ -24,6 +24,7 @@ from marslab.poolutils import wait_for_it
 
 log = logging.getLogger(__name__)
 
+
 class BandSet:
     """
     class for organizing and performing bulk rendering operations on

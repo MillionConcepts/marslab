@@ -590,10 +590,14 @@ def extract_masks(images, instructions=None):
                 )
             else:
                 sendmasks.append(mask)
-    flatmask = (
+    flattened_mask = (
         None if len(passmasks) == 0 else reduce(np.logical_or, passmasks)
     )
-    return images, flatmask, sendmasks
+    return images, flattened_mask, sendmasks
+
+
+def maskwhere(images, constants):
+    return reduce(np.logical_or, [np.isin(i, constants) for i in images])
 
 
 def flatmask(images, dilate=None, sharp=False, square=False):
