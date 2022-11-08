@@ -88,7 +88,7 @@ class BandSet:
         self.load_method = load_method
         self.name = name
         self.counts = None
-        self.threads = threads
+        self.threads = threads if threads is not None else {}
         # optional cache of auxiliary objects. loaders can use this when
         # complex metadata have been pre-parsed, etc..
         self.precached = {}
@@ -105,7 +105,7 @@ class BandSet:
             from marslab.imgops.loaders import pil_load
 
             self.load_method = pil_load
-        self.threads = {}
+
     # TODO: do I need to allow more of these on init? like for copying? maybe?
 
     def setup_pool(self, thread_type):
