@@ -294,7 +294,7 @@ def colormapped_plot(
     if alpha is not None:
         array[:, :, 3] = alpha
     if layers is not None:
-        fig, ax = flatten_layers(
+        fig, ax = flatten_into_figure(
             list(layers) + [{"layer_ix": 0, "image": array}]
         )
     else:
@@ -312,18 +312,39 @@ def colormapped_plot(
     return fig
 
 
-def flatten_layers(layers, **imshow_kwargs):
-    fig, ax = plt.subplots()
+def _duck_alpha(rgb, a):
+    return np.einsum('ijk,ij->ijk', rgb, a)
+
+
+def merge_layers(lower, upper):
+    if upper.shape[2] == 3:
+        return upper
+    alpha_upper = upper[:, :, 3]
+    if lower.shape[2] == 3:
+        alpha_lower = 1 - alpha_upper
+    else:
+        alpha_lower = np.min([1 - alpha_upper, lower[:, :, 3]], axis=0)
+    rgb = (
+        _duck_alpha(upper[:, :, :3], alpha_upper)
+        + _duck_alpha(lower[:, :, :3], alpha_lower)
+    )
+    return np.dstack([rgb, alpha_upper + alpha_lower])
+
+
+def flatten_into_figure(layers, **imshow_kwargs):
     seq, single = separate_by(layers, lambda l: isinstance(l, (tuple, list)))
     layers = list(chain.from_iterable(seq)) + single
     dicts, arrays = separate_by(layers, lambda l: isinstance(l, dict))
     order = [d.get("layer_ix") for d in dicts]
     assert len(set(order)) == len(order)
     dicts.sort(key=lambda d: d.get("layer_ix"))
+    images = []
     for image in list(map(lambda d: d.get("image"), dicts)) + arrays:
         if len(image.shape) != 3:
             image = cm.get_cmap("Greys_r")(image)
-        ax.imshow(image, **imshow_kwargs)
+        images.append(image)
+    fig, ax = plt.subplots()
+    ax.imshow(reduce(merge_layers, images), **imshow_kwargs)
     return fig, ax
 
 
@@ -339,7 +360,7 @@ def simple_figure(
     if (zero_mask is True) and isinstance(image, np.ma.MaskedArray):
         image = np.ma.filled(image, 0)
     if layers is not None:
-        fig, ax = flatten_layers(
+        fig, ax = flatten_into_figure(
             list(layers) + [{"layer_ix": 0, "image": image}], **imshow_kwargs
         )
     else:
