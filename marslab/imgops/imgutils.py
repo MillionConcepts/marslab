@@ -3,7 +3,6 @@ image processing utility functions
 """
 import gc
 import sys
-from _operator import truediv, floordiv
 from functools import partial, reduce
 from itertools import chain
 from operator import mul
@@ -13,7 +12,8 @@ from typing import (
     MutableMapping,
     Collection,
     Mapping,
-    Union, MutableSequence,
+    Union,
+    MutableSequence,
 )
 
 from dustgoggles.structures import dig_for_values
@@ -71,54 +71,8 @@ def crop_all(
     return [crop(array, bounds) for array in arrays]
 
 
-def threshold_mask(
-    arrays: Collection[np.ndarray],
-    percentiles=(1, 99),
-    operator="or"
-):
-    masks = []
-    if operator == "mean":
-        arrays = [_get_flat_mean(arrays, None)]
-    for array in arrays:
-        low, high = np.percentile(ravel_valid(array), percentiles)
-        masks.append(np.ma.masked_outside(array, low, high).mask)
-    if operator == "mean":
-        return masks[0]
-    if operator == "or":
-        return reduce(np.logical_or, masks)
-    return reduce(np.logical_and, masks)
-
-
-def skymask(arrays: Collection[np.ndarray], percentile=75, dilate_mean=None):
-    mean = _get_flat_mean(arrays, dilate_mean)
-    segments = mean > np.percentile(ravel_valid(mean), percentile)
-    from skimage.measure import label
-
-    labels = label(segments, connectivity=1)
-    return labels == 1
-
-
-def _get_flat_mean(arrays, dilate_mean):
-    if all([isinstance(a, np.ma.MaskedArray) for a in arrays]):
-        mean = _flat_masked_mean(arrays, dilate_mean)
-    else:
-        mean = np.ma.mean(np.ma.dstack(arrays), axis=-1)
-    return mean
-
-
 def clip_unmasked(array: np.ma.MaskedArray):
     return np.clip(array.data, array.min(), array.max())
-
-
-def _flat_masked_mean(arrays, dilate):
-    if dilate is not None:
-        mask = flatmask(arrays, dilate=dilate)
-    else:
-        mask = reduce(np.logical_or, [a.mask for a in arrays])
-    mean = np.ma.MaskedArray(
-        np.mean(np.dstack(arrays), axis=-1), mask=mask
-    )
-    return mean
 
 
 def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
@@ -527,7 +481,7 @@ def nanmask(array, copy=True):
 
 
 def make_mask_canvas(image, unmasked_alpha=1, masked_alpha=0):
-    canvas = np.full(image.shape[:2], unmasked_alpha, dtype='float16')
+    canvas = np.full(image.shape[:2], unmasked_alpha, dtype="float16")
     if len(image.shape) > 2:
         mask = image.mask.sum(axis=-1).astype(bool)
     else:
@@ -581,78 +535,8 @@ def colorfill_maskedarray(
     )
 
 
-def extract_masks(images, instructions=None):
-    if instructions is None:
-        return images, None, []
-    passmasks, sendmasks = [], []
-    if any((inst.get("colorfill") is not None for inst in instructions)):
-        canvas = np.zeros(images[0].shape)
-    for inst in instructions:
-        do_pass, do_send = inst.get("pass", False), inst.get("send", True)
-        if (do_pass is False) and (do_send is False):
-            continue
-        func, params = inst["function"], inst["params"]
-        mask = func(images, **params)
-        if do_pass is True:
-            passmasks.append(mask)
-        if do_send is True:
-            if (color_kwargs := inst.get("colorfill")) is not None:
-                sendmasks.append(
-                    colorfill_maskedarray(
-                        np.ma.masked_array(canvas, mask), **color_kwargs
-                    )
-                )
-            else:
-                sendmasks.append(mask)
-    flattened_mask = (
-        None if len(passmasks) == 0 else reduce(np.logical_or, passmasks)
-    )
-    return images, flattened_mask, sendmasks
-
-
 def maskwhere(images, constants):
     return reduce(np.logical_or, [np.isin(i, constants) for i in images])
-
-
-def flatmask(images, dilate=None, sharp=False, square=False):
-    try:
-        mask = reduce(
-            np.logical_or,
-            [i.mask for i in images if isinstance(i, np.ma.MaskedArray)]
-        )
-    except TypeError as te:
-        if "empty iterable" not in str(te):
-            raise
-        return np.full(images[0].shape, False)
-    if dilate is not None:
-        # noinspection PyTypeChecker
-        return dilate_mask(mask, dilate, sharp, square)
-
-
-def dilation_kernel(size=2, sharp=False, square=False):
-    if size < 2:
-        raise ValueError("Kernel size must be at least 2.")
-    kernel = np.ones((size, size))
-    if square is True:
-        return kernel
-    op = truediv if sharp is False else floordiv
-    distance = op(size, 2)
-    return np.ma.filled(cut_annulus(kernel, (0, distance)), 0)
-
-
-def dilate_mask(image, size, sharp=False, square=False, copy=True):
-    from scipy.ndimage import binary_dilation
-
-    if not isinstance(image, np.ma.MaskedArray):
-        return binary_dilation(
-            image.astype(bool), structure=dilation_kernel(size, sharp, square)
-        )
-    if copy is True:
-        image = image.copy()
-    image.mask = binary_dilation(
-        image.mask, structure=dilation_kernel(size, sharp, square)
-    )
-    return image
 
 
 def pick_mask_constructors(region):
@@ -671,7 +555,7 @@ def centered_indices(array):
 
 def radial_index(array):
     y_ix, x_ix = centered_indices(array)
-    return np.sqrt(y_ix ** 2 + x_ix ** 2)
+    return np.sqrt(y_ix**2 + x_ix**2)
 
 
 def join_cut_mask(array, cut_mask, copy=True):

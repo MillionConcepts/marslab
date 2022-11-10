@@ -36,6 +36,7 @@ setup(
         "time": ["sympy", "python-dateutil"],
         "geom": ["pdr"],
         "strict_reshape": ["sympy"],
-        "histograms": ["fast-histogram"]
+        "histograms": ["fast-histogram"],
+        "masking": ["scikit-image", "opencv"]
     }
 )

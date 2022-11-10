@@ -69,7 +69,7 @@ def interpret_prefilter_step(chunk):
 
 
 def interpret_mask_step(chunk):
-    from marslab.imgops.imgutils import extract_masks
+    from marslab.imgops.masking import extract_masks
     return extract_masks, chunk
 
 
