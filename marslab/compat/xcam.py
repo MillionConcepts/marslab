@@ -738,6 +738,7 @@ def construct_field_ordering(filters, fields):
         "SOL",
         "SEQ_ID",
         "FEATURE",
+        "FEATURE_SUBTYPE",
         "DESCRIPTION",
         "SITE",
         "DRIVE",
