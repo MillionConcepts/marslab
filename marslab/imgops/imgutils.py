@@ -71,25 +71,39 @@ def crop_all(
     return [crop(array, bounds) for array in arrays]
 
 
-def threshold_mask(arrays: Collection[np.ndarray], percentiles=(1, 99)):
+def threshold_mask(
+    arrays: Collection[np.ndarray],
+    percentiles=(1, 99),
+    operator="or"
+):
     masks = []
+    if operator == "mean":
+        arrays = [_get_flat_mean(arrays, None)]
     for array in arrays:
         low, high = np.percentile(ravel_valid(array), percentiles)
         masks.append(np.ma.masked_outside(array, low, high).mask)
+    if operator == "mean":
+        return masks[0]
+    if operator == "or":
+        return reduce(np.logical_or, masks)
     return reduce(np.logical_and, masks)
 
 
 def skymask(arrays: Collection[np.ndarray], percentile=75, dilate_mean=None):
-
-    if all([isinstance(a, np.ma.MaskedArray) for a in arrays]):
-        mean = _flat_masked_mean(arrays, dilate_mean)
-    else:
-        mean = np.ma.mean(np.ma.dstack(arrays), axis=-1)
+    mean = _get_flat_mean(arrays, dilate_mean)
     segments = mean > np.percentile(ravel_valid(mean), percentile)
     from skimage.measure import label
 
     labels = label(segments, connectivity=1)
     return labels == 1
+
+
+def _get_flat_mean(arrays, dilate_mean):
+    if all([isinstance(a, np.ma.MaskedArray) for a in arrays]):
+        mean = _flat_masked_mean(arrays, dilate_mean)
+    else:
+        mean = np.ma.mean(np.ma.dstack(arrays), axis=-1)
+    return mean
 
 
 def clip_unmasked(array: np.ma.MaskedArray):
