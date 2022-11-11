@@ -14,7 +14,7 @@ import PIL.Image
 from marslab.imgops.imgutils import std_clip
 
 
-def get_mpl_image(fig):
+def get_mpl_image(fig: Figure):
     """
     tries to get the last axis from a mpl figure.
     cranky and fault-intolerant
@@ -24,7 +24,6 @@ def get_mpl_image(fig):
     buffer = io.BytesIO()
     # despine(ax)
     # remove_ticks(ax)
-    # extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     fig.savefig(buffer, bbox_inches="tight", pad_inches=0)
     return PIL.Image.open(buffer)
 

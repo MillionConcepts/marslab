@@ -21,3 +21,5 @@ dependencies:
   - sympy
   - more-itertools
   - fast-histogram
+  - scikit-image
+  - opencv

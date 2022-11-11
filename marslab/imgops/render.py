@@ -2,6 +2,7 @@
 inline rendering functions for look pipelines. can also be called on their own.
 """
 import io
+from collections import defaultdict
 from functools import reduce
 from itertools import repeat, chain
 from typing import Union, Optional, Sequence
@@ -301,15 +302,50 @@ def colormapped_plot(
         fig, ax = plt.subplots()
         ax.imshow(array)
     if render_colorbar:
-        cax = attach_axis(ax, size="3%", pad="0.5%")
-        colorbar = plt.colorbar(
-            cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax
-        )
-        if colorbar_fp:
-            set_colorbar_font(colorbar, colorbar_fp)
+        attach_colorbar(ax, cmap, colorbar_fp, norm)
     if no_ticks:
         strip_axes(ax)
     return fig
+
+
+def _tformat(number, order, precision):
+    if order > 2:
+        formatted = ("{:." + str(precision) + "e}").format(number)
+        return "".join([formatted[:-2], formatted[-1]])
+    return round(number, order + precision)
+
+
+def attach_colorbar(ax, cmap, colorbar_fp, norm):
+    cax = attach_axis(ax, size="3%", pad="0.5%")
+    colorbar = plt.colorbar(
+        cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax
+    )
+    ymin, ymax = colorbar.ax.get_ylim()
+    extent = ymax - ymin
+    tenths = np.linspace(ymin, ymax, 11)
+    order = int(1 - np.floor(np.log10(extent)))
+    precision, ticks, labels = 0, [], []
+    while len(labels) < 2:
+        ticks, labels = _trylabel(order, precision, tenths)
+        precision += 1
+    colorbar.ax.set_yticks(ticks)
+    colorbar.ax.set_yticklabels(labels)
+    if colorbar_fp:
+        set_colorbar_font(colorbar, colorbar_fp)
+
+
+def _trylabel(order, precision, tenths):
+    ticks, labels = [], []
+    for ix, t in enumerate(tenths):
+        formatted = _tformat(t, order, precision)
+        if formatted in labels:
+            continue
+        ticks.append(t)
+        labels.append(formatted)
+    if len(labels) > 3:
+        ticks = [ticks[0], ticks[round(len(labels) / 2)], ticks[-1]]
+        labels = [labels[0], labels[round(len(labels) / 2)], labels[-1]]
+    return ticks, labels
 
 
 def _duck_alpha(rgb, a):

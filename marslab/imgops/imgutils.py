@@ -39,6 +39,31 @@ def eightbit(array, stretch=(0, 0)):
     return np.round(normalize_range(array, (0, 255), stretch)).astype(np.uint8)
 
 
+def cropmask(array: np.ndarray, bounds=None, copy=True, **_) -> np.ndarray:
+    """
+    :param array: array to be cropped
+    :param bounds: tuple of (left, right, top, bottom) pixels to crop
+    """
+    if bounds is None:
+        return array
+    assert len(bounds) == 4  # test for bad inputs
+    pixels = [side if side != 0 else None for side in bounds]
+    canvas = np.ones(array.shape)
+    for value in (1, 3):
+        if isinstance(pixels[value], int):
+            if pixels[value] > 0:
+                pixels[value] = pixels[value] * -1
+    canvas[pixels[2]: pixels[3], pixels[0]: pixels[1]] = 0
+    if isinstance(array, np.ma.MaskedArray):
+        if copy is True:
+            array.mask = np.logical_or(canvas, array.mask)
+            return array
+        return np.ma.masked_array(
+            array.data, np.logical_or(canvas, array.mask)
+        )
+    return np.ma.masked_array(array, canvas)
+
+
 def crop(array: np.ndarray, bounds=None, **_) -> np.ndarray:
     """
     :param array: array to be cropped

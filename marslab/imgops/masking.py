@@ -50,12 +50,14 @@ def floodfill_mask(mask):
     return flood.astype("bool")
 
 
+# TODO: check _perimeter_
 def skymask(
     arrays,
     dilate_mean=None,
-    opening_radius=5,
+    opening_radius=None,
     percentile=90,
-    extent_ratio=0.9,
+    extent_cutoff=0.03,
+    coverage_cutoff=0.9,
     floodfill=True,
 ):
     mean = _get_flat_mean(arrays, dilate_mean)
@@ -65,17 +67,20 @@ def skymask(
             segments, dilation_kernel(opening_radius * 2, sharp=True)
         )
     mask = pluck_label(segments)
-    if (floodfill is False) and (extent_ratio is None):
-        return mask
-    filled = floodfill_mask(mask)
-    if extent_ratio is not None:
-        mask_extent = np.nonzero(mask)[0].size
-        fill_extent = np.nonzero(filled)[0].size
-        if (mask_extent / fill_extent) < extent_ratio:
+    filled, extent = None, None
+    if extent_cutoff is not None:
+        extent = mask[np.nonzero(mask)].size
+        if (extent / mask.size) < extent_cutoff:
+            return np.full(mask.shape, False)
+    if coverage_cutoff is not None:
+        extent = extent if extent is not None else mask[np.nonzero(mask)].size
+        filled = floodfill_mask(mask)
+        fill_extent = filled[np.nonzero(filled)].size
+        if (extent / fill_extent) < coverage_cutoff:
             return np.full(mask.shape, False)
     if floodfill is False:
         return mask
-    return filled
+    return filled if filled is not None else floodfill_mask(mask)
 
 
 def _get_flat_mean(arrays, dilate_mean):
