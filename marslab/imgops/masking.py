@@ -4,6 +4,7 @@ from typing import Collection
 
 import numpy as np
 import scipy.ndimage as ndi
+from more_itertools import windowed
 
 from marslab.imgops.imgutils import (
     ravel_valid,
@@ -50,7 +51,72 @@ def floodfill_mask(mask):
     return flood.astype("bool")
 
 
-# TODO: check _perimeter_
+def crop_bounds(mask):
+    rows, cols = np.any(mask, axis=1), np.any(mask, axis=0)
+    return mask[rows][:, cols], rows, cols
+
+
+def find_widest_row(mask):
+    cropped, rows, cols = crop_bounds(mask)
+    contiguous = []
+    for row in cropped:
+        truthy = [
+            a
+            for a in np.split(row, np.nonzero(np.diff(row))[0] + 1)
+            if a.any()
+        ]
+        contiguous.append(max([t.size for t in truthy]))
+    contiguous = np.array(contiguous)
+    return np.nonzero(rows)[0][
+        np.nonzero(contiguous == contiguous.max())[0][-1]
+    ]
+
+
+def get_widest_section(row):
+    split_indices = np.nonzero(np.diff(row))[0] + 1
+    length_indices = {}
+    for ix, section in enumerate(np.split(row, split_indices)):
+        if section.any():
+            length_indices[ix] = section
+    widest = max([len(v) for v in length_indices.values()])
+    widest_section = [
+        k for k, v in length_indices.items() if len(v) == widest
+    ][0]
+    return tuple(
+        windowed([0, *split_indices, len(row) - 1], 2)
+    )[widest_section]
+
+
+def test_vertical_coverage(mask, row_ix, col_indices, cutoff):
+    above = mask[:row_ix, col_indices[0] : col_indices[1]]
+    if (result := (np.nonzero(above)[0].size / above.size)) < cutoff:
+        return False, result
+    return True, result
+
+
+def test_coverage(mask, cutoff, extent=None, filled=None):
+    if filled is None:
+        filled = floodfill_mask(mask)
+    if extent is None:
+        extent = mask[np.nonzero(mask)].size
+    fill_extent = filled[np.nonzero(filled)].size
+    if (result := (extent / fill_extent)) < cutoff:
+        return False, extent, filled, result
+    return True, extent, filled, result
+
+
+def test_extent(mask, cutoff, extent=None):
+    if extent is None:
+        extent = mask[np.nonzero(mask)].size
+    if (result := (extent / mask.size)) < cutoff:
+        return False, extent, result
+    return True, extent, result
+
+
+def _blank(shape):
+    return np.full(shape, False)
+
+
 def skymask(
     arrays,
     dilate_mean=None,
@@ -58,7 +124,10 @@ def skymask(
     percentile=90,
     extent_cutoff=0.03,
     coverage_cutoff=0.9,
+    vertical_coverage_cutoff=0.9,
     floodfill=True,
+    clear_above=True,
+    cut_below=True,
 ):
     mean = _get_flat_mean(arrays, dilate_mean)
     segments = centile_threshold(mean, percentile)
@@ -67,20 +136,54 @@ def skymask(
             segments, dilation_kernel(opening_radius * 2, sharp=True)
         )
     mask = pluck_label(segments)
-    filled, extent = None, None
+    ok, filled, extent = True, None, None
     if extent_cutoff is not None:
-        extent = mask[np.nonzero(mask)].size
-        if (extent / mask.size) < extent_cutoff:
-            return np.full(mask.shape, False)
+        ok, extent, result = test_extent(mask, extent_cutoff, extent)
+        if ok is False:
+            print(f"failed extent: {result} < {extent_cutoff}")
+            return _blank(mask.shape)
     if coverage_cutoff is not None:
-        extent = extent if extent is not None else mask[np.nonzero(mask)].size
-        filled = floodfill_mask(mask)
-        fill_extent = filled[np.nonzero(filled)].size
-        if (extent / fill_extent) < coverage_cutoff:
-            return np.full(mask.shape, False)
-    if floodfill is False:
+        ok, extent, filled, result = test_coverage(
+            mask, coverage_cutoff, extent
+        )
+        if ok is False:
+            print(f"failed coverage: {result} < {coverage_cutoff}")
+            return _blank(mask.shape)
+    if not (
+        (vertical_coverage_cutoff is not None) or clear_above or cut_below
+    ):
+        if floodfill is True:
+            if filled is None:
+                return floodfill_mask(mask)
+            else:
+                return filled
         return mask
-    return filled if filled is not None else floodfill_mask(mask)
+    widest_row_ix = find_widest_row(mask)
+    widest_row = mask[widest_row_ix]
+    w_col_indices = get_widest_section(widest_row)
+    if vertical_coverage_cutoff is not None:
+        ok, result = test_vertical_coverage(
+            mask, widest_row_ix, w_col_indices, vertical_coverage_cutoff
+        )
+        if ok is False:
+            print(
+                f"failed vert coverage: {result} < {vertical_coverage_cutoff}"
+            )
+            return _blank(mask.shape)
+    # show(mask)
+    if clear_above is True:
+        mask[:widest_row_ix, w_col_indices[0] : w_col_indices[1]] = 1
+    # show(mask)
+    if cut_below is True:
+        below = ~mask[widest_row_ix:]
+        row_x = np.arange(w_col_indices[0] + 1, w_col_indices[1])
+        bounds = [np.nonzero(below[:, x])[0][0] for x in row_x]
+        for bound, x in zip(bounds, row_x):
+            mask[(widest_row_ix + bound):, x] = 0
+        mask = pluck_label(ndi.binary_erosion(mask, dilation_kernel(6)))
+    if floodfill is True:
+        return floodfill_mask(mask)
+    return mask
 
 
 def _get_flat_mean(arrays, dilate_mean):
