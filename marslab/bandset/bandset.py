@@ -181,7 +181,7 @@ class BandSet:
             return self.metadata.loc[
                 self.metadata["BAND"] == band_name, "BAYER_PIXEL"
             ].iloc[0]
-        except (KeyError, ValueError, AttributeError):
+        except (KeyError, ValueError, AttributeError, IndexError):
             return None
 
     def wavelength(self, band_names: Union[str, Sequence[str]]):
@@ -195,7 +195,7 @@ class BandSet:
                         self.metadata["BAND"] == band_name, "WAVELENGTH"
                     ].iloc[0]
                 )
-            except (KeyError, ValueError, AttributeError):
+            except (KeyError, ValueError, AttributeError, IndexError):
                 continue
         return wavelengths
 

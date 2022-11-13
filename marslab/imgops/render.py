@@ -249,6 +249,7 @@ def colormapped_plot(
     drop_mask=True,
     alpha=None,
     layers=None,
+    n_ticks=3
 ):
     """
     generate a colormapped plot, optionally with colorbar, from 2D array.
@@ -285,24 +286,25 @@ def colormapped_plot(
     if isinstance(array, np.ma.masked_array):
         if drop_mask is True:
             array = array.data
-        else:
-            array = array.filled(mask_fill_color)
     if isinstance(cmap, str):
         cmap = cm.get_cmap(cmap)
     if cmap is None:
         cmap = cm.get_cmap("Greys_r")
-    array = cmap(norm(array))
+    mapped = cmap(norm(array))
+    if isinstance(array, np.ma.MaskedArray) and (drop_mask is False):
+        mapped[array.mask] = mask_fill_color
+    del array
     if alpha is not None:
-        array[:, :, 3] = alpha
+        mapped[:, :, 3] = alpha
     if layers is not None:
         fig, ax = flatten_into_figure(
-            list(layers) + [{"layer_ix": 0, "image": array}]
+            list(layers) + [{"layer_ix": 0, "image": mapped}]
         )
     else:
         fig, ax = plt.subplots()
-        ax.imshow(array)
+        ax.imshow(mapped)
     if render_colorbar:
-        attach_colorbar(ax, cmap, colorbar_fp, norm)
+        attach_colorbar(ax, cmap, colorbar_fp, norm, n_ticks)
     if no_ticks:
         strip_axes(ax)
     return fig
@@ -315,18 +317,18 @@ def _tformat(number, order, precision):
     return round(number, order + precision)
 
 
-def attach_colorbar(ax, cmap, colorbar_fp, norm):
+def attach_colorbar(ax, cmap, colorbar_fp, norm, n_ticks=3):
     cax = attach_axis(ax, size="3%", pad="0.5%")
     colorbar = plt.colorbar(
         cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax
     )
     ymin, ymax = colorbar.ax.get_ylim()
     extent = ymax - ymin
-    tenths = np.linspace(ymin, ymax, 11)
+    gauge = np.linspace(ymin, ymax, n_ticks * 4 - 1)
     order = int(1 - np.floor(np.log10(extent)))
     precision, ticks, labels = 0, [], []
-    while len(labels) < 2:
-        ticks, labels = _trylabel(order, precision, tenths)
+    while len(labels) < (n_ticks - 1):
+        ticks, labels = _trylabel(order, precision, gauge, n_ticks)
         precision += 1
     colorbar.ax.set_yticks(ticks)
     colorbar.ax.set_yticklabels(labels)
@@ -334,17 +336,22 @@ def attach_colorbar(ax, cmap, colorbar_fp, norm):
         set_colorbar_font(colorbar, colorbar_fp)
 
 
-def _trylabel(order, precision, tenths):
+def _trylabel(order, precision, gauge, n_ticks):
     ticks, labels = [], []
-    for ix, t in enumerate(tenths):
+    for ix, t in enumerate(gauge):
         formatted = _tformat(t, order, precision)
         if formatted in labels:
             continue
         ticks.append(t)
         labels.append(formatted)
-    if len(labels) > 3:
-        ticks = [ticks[0], ticks[round(len(labels) / 2)], ticks[-1]]
-        labels = [labels[0], labels[round(len(labels) / 2)], labels[-1]]
+    if len(labels) > n_ticks:
+        indices = []
+        n_ticks = 10
+        needed = n_ticks
+        for cutoff in np.percentile(ticks, np.linspace(0, 100, needed)):
+            indices.append(np.argmin(np.abs(ticks - cutoff)))
+        ticks = [ticks[ix] for ix in indices]
+        labels = [labels[ix] for ix in indices]
     return ticks, labels
 
 

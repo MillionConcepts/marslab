@@ -195,11 +195,14 @@ class Look(Composition, ABC):
             if "WAVELENGTH" in self.metadata.columns:
                 wavelengths = []
                 for band in self.bands:
-                    wavelengths.append(
-                        self.metadata.loc[
-                            self.metadata["BAND"] == band, "WAVELENGTH"
-                        ].iloc[0]
-                    )
+                    try:
+                        wavelengths.append(
+                            self.metadata.loc[
+                                self.metadata["BAND"] == band, "WAVELENGTH"
+                            ].iloc[0]
+                        )
+                    except (KeyError, IndexError):
+                        continue
                 self._add_wavelengths(wavelengths)
 
 
