@@ -140,14 +140,12 @@ def skymask(
     if extent_cutoff is not None:
         ok, extent, result = test_extent(mask, extent_cutoff, extent)
         if ok is False:
-            print(f"failed extent: {result} < {extent_cutoff}")
             return _blank(mask.shape)
     if coverage_cutoff is not None:
         ok, extent, filled, result = test_coverage(
             mask, coverage_cutoff, extent
         )
         if ok is False:
-            print(f"failed coverage: {result} < {coverage_cutoff}")
             return _blank(mask.shape)
     if not (
         (vertical_coverage_cutoff is not None) or clear_above or cut_below
@@ -166,9 +164,6 @@ def skymask(
             mask, widest_row_ix, w_col_indices, vertical_coverage_cutoff
         )
         if ok is False:
-            print(
-                f"failed vert coverage: {result} < {vertical_coverage_cutoff}"
-            )
             return _blank(mask.shape)
     # show(mask)
     if clear_above is True:

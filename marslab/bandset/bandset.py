@@ -351,6 +351,7 @@ class BandSet:
             look_cache = wait_for_it(
                 pool, look_cache, log, message="generated ", as_dict=True
             )
+            pool.terminate()
         self.looks |= look_cache
 
     def purge(self, what: Optional[str] = None) -> None:
@@ -409,6 +410,7 @@ class BandSet:
             # TODO: extend this, generally speaking, to give useful messages
             #  about failure
             wait_for_it(pool, results, log, "wrote ")
+            pool.terminate()
 
 
 class ImageBands(BandSet):

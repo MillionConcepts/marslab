@@ -32,7 +32,9 @@ class ChangeReporter:
 
 
 def watch_pool(
-    result_map, interval: float = 0.1, callback: Optional[Callable] = None
+    result_map,
+    interval: float = 0.1,
+    callback: Optional[Callable] = None,
 ):
     in_readiness = {
         task: result.ready() for task, result in result_map.items()
