@@ -7,12 +7,14 @@ from typing import Collection
 import numpy as np
 import scipy.ndimage as ndi
 from more_itertools import windowed
+from skimage.measure import label
 
 from marslab.imgops.imgutils import (
     ravel_valid,
     colorfill_maskedarray,
     cut_annulus,
     eightbit,
+    normalize_range,
 )
 
 
@@ -37,8 +39,6 @@ def centile_threshold(array, percentile):
 
 
 def pluck_label(array, connectivity=1, label_ix=1):
-    from skimage.measure import label
-
     mask = label(array, connectivity=connectivity) == label_ix
     return mask
 
@@ -130,97 +130,16 @@ def _blank(shape):
     return np.full(shape, False)
 
 
-def outline(array, edge_params=(60, 100), sigma=5, threshold=25, erosion=3):
-    import cv2
-
-    if array.dtype != np.uint8:
-        array = eightbit(array)
-    edges = cv2.Canny(array, *edge_params)
-    if sigma is not None:
-        edges = ndi.gaussian_filter(edges, sigma=sigma)
-    threshold = centile_threshold(edges, threshold)
-    return maybe_filter(threshold, erosion, filt=ndi.binary_erosion)
-
-
 def maybe_filter(array, size=None, footprint=None, filt=ndi.median_filter):
     if (size is None) and (footprint is None):
         return array
     if footprint is None:
         footprint = np.ones((size, size))
     sig = signature(filt)
-    for kwarg in ('structure', 'footprint'):
+    for kwarg in ("structure", "footprint"):
         if kwarg in sig.parameters.keys():
             break
     return filt(array, **{kwarg: footprint})
-
-
-def skymask(
-    arrays,
-    percentile=90,
-    edge_params=MappingProxyType({'sigma': 3}),
-    median=MappingProxyType({'input': 5, 'segments': None}),
-    cutoffs=MappingProxyType(
-        {'extent': 0.05, 'coverage': None, 'v': 0.9, 'h': None}
-    ),
-    input_mask_dilation=None,
-    floodfill=True,
-    refit_params=MappingProxyType(
-        {'clear': True, 'cut': True, 'cut_depth': 5, 'edge_sigma': None}
-    ),
-):
-    mean = maybe_filter(
-        _get_flat_mean(arrays, input_mask_dilation), median.get('input')
-    )
-    edges = outline(mean, **edge_params)
-    if percentile is not None:
-        segments = centile_threshold(mean, percentile)
-    else:
-        segments = np.ones(mean.shape)
-    segments[np.nonzero(edges)] = 0
-    segments = maybe_filter(segments, median.get('segments'))
-    mask = pluck_label(segments)
-    if check_mask_validity(mask, **cutoffs) is False:
-        return _blank(mask.shape)
-    mask[edges] = 1
-    mask = refit_mask(mask, mean, edges, **refit_params)
-    if floodfill is True:
-        return floodfill_mask(mask)
-    return mask
-
-
-def refit_mask(
-    mask,
-    base,
-    edges=None,
-    clear=True,
-    cut=True,
-    cut_depth=5,
-    edge_sigma=None
-):
-    if (clear is False) and (cut is False):
-        return mask
-    w_col_ix, w_row_ix = widest_part(mask)
-    if clear is True:
-        mask[:w_row_ix, w_col_ix[0]: w_col_ix[1]] = 1
-    if cut is True:
-        if edges is None:
-            edges = outline(base[w_row_ix:])
-        else:
-            edges = edges[w_row_ix:]
-        if edge_sigma is not None:
-            edges = ndi.gaussian_filter(edges.astype('uint8'), sigma=edge_sigma)
-        below = np.cumsum(edges, axis=0)
-        # row_x = np.arange(w_col_ix[0] + 1, w_col_ix[1])
-        row_x = np.arange(0, mask.shape[1])
-        bounds = {}
-        for x in row_x:
-            bound = np.nonzero(below[:, x] >= cut_depth)[0]
-            if len(bound) > 0:
-                bounds[x] = bound[0]
-        # bounds = [np.nonzero(below[:, x] >= cut_depth)[0][0] for x in row_x]
-        for x, bound in bounds.items():
-            mask[(w_row_ix + bound):, x] = 0
-    return pluck_label(mask)
 
 
 def widest_part(mask):
@@ -232,20 +151,125 @@ def widest_part(mask):
 
 def check_mask_validity(mask, extent=None, coverage=None, v=None, h=None):
     for check, threshold in zip(
-        (test_extent, test_coverage, test_axes),
-        (extent, coverage, (v, h))
+        (test_extent, test_coverage, test_axes), (extent, coverage, (v, h))
     ):
         if check(mask, threshold) is False:
             return False
     return True
 
 
-def _get_flat_mean(arrays, dilate_mean=None):
+def outline(
+    array, edge_thresholds=(60, 100), sigma=5, threshold=25, erosion=3
+):
+    import cv2
+
+    if array.dtype != np.uint8:
+        array = eightbit(array)
+    edges = cv2.Canny(array, *edge_thresholds)
+    if sigma is not None:
+        edges = ndi.maximum_filter(edges, footprint=np.ones((sigma, sigma)))
+    threshold = centile_threshold(edges, threshold)
+    return maybe_filter(threshold, erosion, filt=ndi.binary_erosion)
+
+
+def _get_flat_mean(arrays, dilate_mean=None, normalize=None):
+    if normalize is not None:
+        arrays = [
+            normalize_range(array, stretch=normalize) for array in arrays
+        ]
     if all([isinstance(a, np.ma.MaskedArray) for a in arrays]):
         mean = _flat_masked_mean(arrays, dilate_mean)
     else:
         mean = np.ma.mean(np.ma.dstack(arrays), axis=-1)
     return mean
+
+
+def refit_mask(
+    mask, base, edges=None, clear=True, cut=True, cut_depth=10, edge_sigma=7
+):
+    if (clear is False) and (cut is False):
+        return mask
+    w_col_ix, w_row_ix = widest_part(mask)
+    if clear is True:
+        mask[:w_row_ix, w_col_ix[0] : w_col_ix[1]] = 1
+    if cut is True:
+        if edges is None:
+            edges = outline(base[w_row_ix:])
+        else:
+            edges = edges[w_row_ix:]
+        below = ndi.gaussian_filter(np.cumsum(edges, axis=0), edge_sigma)
+        row_x = np.arange(0, mask.shape[1])
+        bounds = {}
+        for x in row_x:
+            bound = np.nonzero(below[:, x] >= cut_depth)[0]
+            if len(bound) > 0:
+                bounds[x] = bound[0]
+        for x, bound in bounds.items():
+            mask[(w_row_ix + bound) :, x] = 0
+    return pluck_label(mask)
+
+
+def pick_valid_label(array, cutoffs):
+    labels = label(array)
+    for label_ix in np.unique(labels[0][labels[0] >= 1]):
+        mask = labels == label_ix
+        if check_mask_validity(mask, **cutoffs) is True:
+            return mask
+    return None
+
+
+def hyperpixel_edges(
+    images,
+    stretch=(10, 1),
+    slic_kwargs=MappingProxyType(
+        {"n_segments": 5, "sigma": 2, "compactness": 3}
+    ),
+):
+    from skimage.segmentation import find_boundaries, slic
+
+    cube = np.dstack(
+        [normalize_range(image, stretch=stretch) for image in images]
+    )
+    return find_boundaries(slic(cube, **slic_kwargs))
+
+
+def skymask(
+    arrays,
+    percentile=90,
+    edge_params=MappingProxyType({"sigma": 3}),
+    median=MappingProxyType({"input": 5, "segments": None}),
+    cutoffs=MappingProxyType(
+        {"extent": 0.05, "coverage": None, "v": 0.9, "h": None}
+    ),
+    input_mask_dilation=None,
+    floodfill=True,
+    refit_params=MappingProxyType(
+        {"clear": True, "cut": True, "cut_depth": 10, "edge_sigma": None}
+    ),
+    colorblock=False,
+):
+    mean = maybe_filter(
+        _get_flat_mean(arrays, input_mask_dilation, normalize=(10, 1)),
+        median.get("input"),
+    )
+
+    edges = outline(mean, **edge_params)
+    if percentile is not None:
+        segments = centile_threshold(mean, percentile)
+    else:
+        segments = np.ones(mean.shape)
+    dark = segments.copy()
+    dark[edges] = 0
+    if colorblock is True:
+        dark[hyperpixel_edges(arrays)] = 0
+    if median.get("segments") is not None:
+        dark = ndi.minimum_filter(dark, median["segments"])
+    if (mask := pick_valid_label(dark, cutoffs)) is None:
+        return _blank(mean.shape)
+    mask = refit_mask(mask, mean, edges, **refit_params)
+    if floodfill is True:
+        return floodfill_mask(mask)
+    return mask
 
 
 def _flat_masked_mean(arrays, dilate=None):

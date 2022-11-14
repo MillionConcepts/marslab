@@ -2,6 +2,7 @@
 utility functions for dealing with matplotlib
 """
 import io
+from math import ceil, sqrt
 
 from dustgoggles.composition import Composition
 from matplotlib.colorbar import Colorbar
@@ -20,10 +21,7 @@ def get_mpl_image(fig: Figure):
     cranky and fault-intolerant
     """
     # todo: this does not work for the general case. investigate.
-    ax = fig.axes[0]
     buffer = io.BytesIO()
-    # despine(ax)
-    # remove_ticks(ax)
     fig.savefig(buffer, bbox_inches="tight", pad_inches=0)
     return PIL.Image.open(buffer)
 
@@ -96,3 +94,22 @@ def clipshow_factory(title=None):
         {'clip': std_clip, 'plot': prefigure(plt.imshow, title)},
         inserts={'clip': {'sigma': 1}}
     )
+
+
+def gridshow(arrays, kwarg_seq=None, *imshow_args, strip=True, **imshow_kwargs):
+    size = ceil(sqrt(len(arrays)))
+    fig, grid = plt.subplots(size, size)
+    kwarg_seq = [] if kwarg_seq is None else kwarg_seq
+    kwarg_seq = [
+        {} if i + 1 > len(kwarg_seq) else kwarg_seq[i] for i in range(len(arrays))
+    ]
+    for cell_ix in range(len(arrays)):
+        x, y = (cell_ix % size, (cell_ix // size) % size)
+        cell = grid[x][y]
+        cell.imshow(
+            arrays[cell_ix], *imshow_args, **kwarg_seq[cell_ix], **imshow_kwargs
+        )
+    if strip is True:
+        tuple(map(strip_axes, grid.ravel()))
+    fig.tight_layout()
+    return fig, grid
