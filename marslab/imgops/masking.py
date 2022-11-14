@@ -185,7 +185,7 @@ def _get_flat_mean(arrays, dilate_mean=None, normalize=None):
 
 
 def refit_mask(
-    mask, base, edges=None, clear=True, cut=True, cut_depth=10, edge_sigma=7
+    mask, edges, clear=True, cut=True, cut_depth=10, edge_sigma=7
 ):
     if (clear is False) and (cut is False):
         return mask
@@ -193,10 +193,6 @@ def refit_mask(
     if clear is True:
         mask[:w_row_ix, w_col_ix[0] : w_col_ix[1]] = 1
     if cut is True:
-        if edges is None:
-            edges = outline(base[w_row_ix:])
-        else:
-            edges = edges[w_row_ix:]
         below = ndi.gaussian_filter(np.cumsum(edges, axis=0), edge_sigma)
         row_x = np.arange(0, mask.shape[1])
         bounds = {}
@@ -252,21 +248,19 @@ def skymask(
         _get_flat_mean(arrays, input_mask_dilation, normalize=(10, 1)),
         median.get("input"),
     )
-
     edges = outline(mean, **edge_params)
     if percentile is not None:
-        segments = centile_threshold(mean, percentile)
+        canvas = centile_threshold(mean, percentile)
     else:
-        segments = np.ones(mean.shape)
-    dark = segments.copy()
-    dark[edges] = 0
+        canvas = np.ones(mean.shape)
+    canvas[edges] = 0
     if colorblock is True:
-        dark[hyperpixel_edges(arrays)] = 0
+        canvas[hyperpixel_edges(arrays)] = 0
     if median.get("segments") is not None:
-        dark = ndi.minimum_filter(dark, median["segments"])
-    if (mask := pick_valid_label(dark, cutoffs)) is None:
+        canvas = ndi.minimum_filter(canvas, median["segments"])
+    if (mask := pick_valid_label(canvas, cutoffs)) is None:
         return _blank(mean.shape)
-    mask = refit_mask(mask, mean, edges, **refit_params)
+    mask = refit_mask(mask, edges, **refit_params)
     if floodfill is True:
         return floodfill_mask(mask)
     return mask
