@@ -34,6 +34,24 @@ def threshold_mask(
     return reduce(np.logical_and, masks)
 
 
+def ink(
+    images,
+    median=5,
+    minimum=5,
+    sigma=3,
+    edge_thresholds=(60, 110),
+    erosion=3,
+    input_stretch=(10, 1)
+):
+    mean = maybe_filter(
+        _get_flat_mean(images, None, normalize=input_stretch), median
+    )
+    edges = outline(mean, edge_thresholds, sigma, erosion=erosion)
+    canvas = np.ones(images[0].shape)
+    canvas[edges] = 0
+    return maybe_filter(canvas, minimum, filt=ndi.minimum_filter)
+
+
 def centile_threshold(array, percentile):
     return array > np.percentile(ravel_valid(array), percentile)
 
@@ -158,18 +176,14 @@ def check_mask_validity(mask, extent=None, coverage=None, v=None, h=None):
     return True
 
 
-def outline(
-    array, edge_thresholds=(60, 100), sigma=5, threshold=25, erosion=3
-):
+def outline(array, edge_thresholds=(60, 100), sigma=5, erosion=3):
     import cv2
 
     if array.dtype != np.uint8:
         array = eightbit(array)
     edges = cv2.Canny(array, *edge_thresholds)
-    if sigma is not None:
-        edges = ndi.maximum_filter(edges, footprint=np.ones((sigma, sigma)))
-    threshold = centile_threshold(edges, threshold)
-    return maybe_filter(threshold, erosion, filt=ndi.binary_erosion)
+    edges = maybe_filter(edges, sigma, filt=ndi.maximum_filter)
+    return maybe_filter(edges, erosion, filt=ndi.binary_erosion)
 
 
 def _get_flat_mean(arrays, dilate_mean=None, normalize=None):
@@ -184,24 +198,34 @@ def _get_flat_mean(arrays, dilate_mean=None, normalize=None):
     return mean
 
 
+def clear_overhead_pixels(mask, row, start, stop):
+    """warning: mutates mask inplace"""
+    mask[:row, start:stop] = 1
+    return mask
+
+
+def trim_infiltrate_pixels(mask, row=0, trim_depth=10, depth_sigma=7):
+    not_mask = ~floodfill_mask(mask).copy()
+    not_mask[:row] = 0
+    depth = ndi.gaussian_filter(np.cumsum(not_mask, axis=0), depth_sigma)
+    depth_mask = depth <= trim_depth
+    return np.logical_and(mask, depth_mask)
+
+
 def refit_mask(
-    mask, edges, clear=True, cut=True, cut_depth=10, edge_sigma=7
+    mask, clear=True, trim=False, trim_depth=10, depth_sigma=7
 ):
-    if (clear is False) and (cut is False):
+    if (clear is False) and (trim is False):
         return mask
-    w_col_ix, w_row_ix = widest_part(mask)
+    w_col_indices, w_row_ix = widest_part(floodfill_mask(mask))
     if clear is True:
-        mask[:w_row_ix, w_col_ix[0] : w_col_ix[1]] = 1
-    if cut is True:
-        below = ndi.gaussian_filter(np.cumsum(edges, axis=0), edge_sigma)
-        row_x = np.arange(0, mask.shape[1])
-        bounds = {}
-        for x in row_x:
-            bound = np.nonzero(below[:, x] >= cut_depth)[0]
-            if len(bound) > 0:
-                bounds[x] = bound[0]
-        for x, bound in bounds.items():
-            mask[(w_row_ix + bound) :, x] = 0
+        mask = clear_overhead_pixels(
+            mask, w_row_ix, w_col_indices[0], w_col_indices[-1]
+        )
+    if trim is True:
+        mask = trim_infiltrate_pixels(
+            mask, w_row_ix, trim_depth, depth_sigma
+        )
     return pluck_label(mask)
 
 
@@ -214,7 +238,7 @@ def pick_valid_label(array, cutoffs):
     return None
 
 
-def hyperpixel_edges(
+def superpixel_edges(
     images,
     stretch=(10, 1),
     slic_kwargs=MappingProxyType(
@@ -231,36 +255,34 @@ def hyperpixel_edges(
 
 def skymask(
     arrays,
-    percentile=90,
+    percentile=75,
     edge_params=MappingProxyType({"sigma": 3}),
-    median=MappingProxyType({"input": 5, "segments": None}),
+    input_median=5,
+    trace_median=5,
     cutoffs=MappingProxyType(
         {"extent": 0.05, "coverage": None, "v": 0.9, "h": None}
     ),
     input_mask_dilation=None,
+    input_stretch=(10, 1),
     floodfill=True,
-    refit_params=MappingProxyType(
-        {"clear": True, "cut": True, "cut_depth": 10, "edge_sigma": None}
-    ),
+    trim_params = MappingProxyType({"trim": False}),
+    clear=True,
     colorblock=False,
 ):
     mean = maybe_filter(
-        _get_flat_mean(arrays, input_mask_dilation, normalize=(10, 1)),
-        median.get("input"),
+        _get_flat_mean(arrays, input_mask_dilation, normalize=input_stretch),
+        input_median
     )
-    edges = outline(mean, **edge_params)
+    trace = ~outline(mean, **edge_params)
     if percentile is not None:
-        canvas = centile_threshold(mean, percentile)
-    else:
-        canvas = np.ones(mean.shape)
-    canvas[edges] = 0
+        trace = np.logical_and(trace, centile_threshold(mean, percentile))
     if colorblock is True:
-        canvas[hyperpixel_edges(arrays)] = 0
-    if median.get("segments") is not None:
-        canvas = ndi.minimum_filter(canvas, median["segments"])
-    if (mask := pick_valid_label(canvas, cutoffs)) is None:
+        trace[superpixel_edges(arrays)] = 0
+    if trace_median is not None:
+        trace = ndi.minimum_filter(trace, trace_median)
+    if (mask := pick_valid_label(trace, cutoffs)) is None:
         return _blank(mean.shape)
-    mask = refit_mask(mask, edges, **refit_params)
+    mask = refit_mask(mask, clear, **trim_params)
     if floodfill is True:
         return floodfill_mask(mask)
     return mask
