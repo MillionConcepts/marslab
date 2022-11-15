@@ -38,7 +38,7 @@ def ink(
     images,
     median=5,
     minimum=5,
-    sigma=3,
+    maximum=3,
     edge_thresholds=(60, 110),
     erosion=3,
     input_stretch=(10, 1)
@@ -46,7 +46,7 @@ def ink(
     mean = maybe_filter(
         _get_flat_mean(images, None, normalize=input_stretch), median
     )
-    edges = outline(mean, edge_thresholds, sigma, erosion=erosion)
+    edges = outline(mean, edge_thresholds, maximum, erosion=erosion)
     canvas = np.ones(images[0].shape)
     canvas[edges] = 0
     return maybe_filter(canvas, minimum, filt=ndi.minimum_filter)
@@ -176,13 +176,13 @@ def check_mask_validity(mask, extent=None, coverage=None, v=None, h=None):
     return True
 
 
-def outline(array, edge_thresholds=(60, 100), sigma=5, erosion=3):
+def outline(array, edge_thresholds=(60, 100), maximum=5, erosion=3):
     import cv2
 
     if array.dtype != np.uint8:
         array = eightbit(array)
     edges = cv2.Canny(array, *edge_thresholds)
-    edges = maybe_filter(edges, sigma, filt=ndi.maximum_filter)
+    edges = maybe_filter(edges, maximum, filt=ndi.maximum_filter)
     return maybe_filter(edges, erosion, filt=ndi.binary_erosion)
 
 
@@ -258,14 +258,14 @@ def skymask(
     percentile=75,
     edge_params=MappingProxyType({"sigma": 3}),
     input_median=5,
-    trace_median=5,
+    trace_maximum=5,
     cutoffs=MappingProxyType(
         {"extent": 0.05, "coverage": None, "v": 0.9, "h": None}
     ),
     input_mask_dilation=None,
     input_stretch=(10, 1),
     floodfill=True,
-    trim_params = MappingProxyType({"trim": False}),
+    trim_params=MappingProxyType({"trim": False}),
     clear=True,
     colorblock=False,
 ):
@@ -278,8 +278,8 @@ def skymask(
         trace = np.logical_and(trace, centile_threshold(mean, percentile))
     if colorblock is True:
         trace[superpixel_edges(arrays)] = 0
-    if trace_median is not None:
-        trace = ndi.minimum_filter(trace, trace_median)
+    if trace_maximum is not None:
+        trace = ndi.minimum_filter(trace, trace_maximum)
     if (mask := pick_valid_label(trace, cutoffs)) is None:
         return _blank(mean.shape)
     mask = refit_mask(mask, clear, **trim_params)
