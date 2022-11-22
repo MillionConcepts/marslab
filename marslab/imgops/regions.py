@@ -1,5 +1,4 @@
 import numpy as np
-from astropy.io import fits
 from scipy.ndimage import sobel, distance_transform_edt
 from scipy.stats import skew, kurtosis, mode
 
@@ -158,6 +157,8 @@ def make_roi_hdu(input_array, roi_name, metadata_dict):
     """
     make an individual HDU for a marslab .roi file
     """
+    from astropy.io import fits
+
     roi_hdu = fits.PrimaryHDU(input_array)
     # this parameter is separate and mandatory because we really
     # need every ROI to have some kind of distinguishing name

@@ -228,6 +228,7 @@ def polish_xcam_spectrum(
             righteye_scale = filter_mean / scales[1]
 
     real_filters_to_use = list(cam_info["filters"].keys())
+    # TODO: get rid of legacy _ERR fields
     if average_filters is True:
         # construct dictionary of averaged filter values
         for v_filter, comps in cam_info["virtual_filter_mapping"].items():
@@ -246,7 +247,7 @@ def polish_xcam_spectrum(
                 ),
             }
             if all([comp + "_STD" in spectrum.keys() for comp in comps]):
-                values[v_filter]["var"] = (
+                values[v_filter]["std"] = (
                     spectrum[comps[0] + "_STD"] ** 2
                     + spectrum[comps[1] + "_STD"] ** 2
                 ) ** 0.5
@@ -269,7 +270,7 @@ def polish_xcam_spectrum(
             "mean": spectrum[real_filter] * eye_scale,
         }
         if real_filter + "_STD" in spectrum.keys():
-            values[real_filter]["var"] = (
+            values[real_filter]["std"] = (
                 spectrum[real_filter + "_STD"] * eye_scale
             )
         if real_filter + "_ERR" in spectrum.keys():
