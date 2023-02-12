@@ -113,3 +113,11 @@ def gridshow(arrays, kwarg_seq=None, *imshow_args, strip=True, **imshow_kwargs):
         tuple(map(strip_axes, grid.ravel()))
     fig.tight_layout()
     return fig, grid
+
+
+def dpi_from_image(fig, ax_ix=0, im_ix=0):
+    image = fig.axes[ax_ix].get_images()[im_ix]
+    _, im_x_pix = image.get_size()
+    dpi_transform = fig.dpi_scale_trans.inverted()
+    im_x_in = image.get_window_extent().transformed(dpi_transform).bounds[2]
+    return im_x_pix / im_x_in
