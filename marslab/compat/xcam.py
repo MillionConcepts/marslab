@@ -29,6 +29,48 @@ WAVELENGTH_TO_FILTER = {
         750: "750",
         840: "840",
     },
+    "SCAM": {
+        400: "400",
+        430: "430",
+        433: "433",
+        440: "440",
+        460: "460",
+        545: "545",
+        600: "600",
+        650: "650",
+        670: "670",
+        700: "700",
+        750: "750",
+        850: "850",
+        1330: "1330",
+        1350: "1350",
+        1400: "1400",
+        1420: "1420",
+        1467: "1467",
+        1560: "1560",
+        1690: "1690",
+        1750: "1750",
+        1800: "1800",
+        1815: "1815",
+        1820: "1820",
+        1930: "1930",
+        2100: "2100",
+        2150: "2150",
+        2165: "2165",
+        2200: "2200",
+        2210: "2210",
+        2230: "2230",
+        2250: "2250",
+        2280: "2280",
+        2320: "2320",
+        2340: "2340",
+        2350: "2350",
+        2390: "2390",
+        2450: "2450",
+        2500: "2500",
+        2530: "2530",
+        2570: "2570",
+    },
     "ZCAM": {
         "L": {
             630: "L0R",
@@ -108,20 +150,20 @@ FILTER_TO_RESOLUTION_FACTOR = {
 }
 
 # rules currently in use:
-# set of virtual filters === the set of pairs of real filters with nominal
+# set of virtual filters === the set of pairs of  filters with nominal
 # band centers within 5 nm of one another
 # the virtual mean reflectance in an ROI for a virtual filter is the
-# arithmetic mean of the mean reflectance values in that ROI for the two real
+# arithmetic mean of the mean reflectance values in that ROI for the two 
 # filters in its associated pair.
 # the nominal band center of a virtual filter is the arithmetic mean of the
-# nominal band centers of the two real filters in its associated pair.
+# nominal band centers of the two  filters in its associated pair.
 
 
 def make_xcam_filter_dict(abbreviation):
     """
     form filter: wavelength dictionary for mastcam-family instruments
     """
-    if abbreviation == "CCAM":
+    if abbreviation == "CCAM" or abbreviation == "SCAM":
         return {
             name: wavelength
             for wavelength, name in sorted(
@@ -194,7 +236,7 @@ def make_canonical_averaged_filters(abbreviation):
     return {filt: caf[filt] for filt in sorted(caf, key=lambda x: caf[x])}
 
 
-XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM"]
+XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM", "SCAM"]
 DERIVED_CAM_DICT = {
     abbrev: {
         "filters": make_xcam_filter_dict(abbrev),
@@ -227,7 +269,7 @@ def polish_xcam_spectrum(
             lefteye_scale = filter_mean / scales[0]
             righteye_scale = filter_mean / scales[1]
 
-    real_filters_to_use = list(cam_info["filters"].keys())
+    _filters_to_use = list(cam_info["filters"].keys())
     # TODO: get rid of legacy _ERR fields
     if average_filters is True:
         # construct dictionary of averaged filter values
@@ -236,7 +278,7 @@ def polish_xcam_spectrum(
             # a pair are not present
             if not all([spectrum.get(comp) for comp in comps]):
                 continue
-            [real_filters_to_use.remove(comp) for comp in comps]
+            [_filters_to_use.remove(comp) for comp in comps]
             values[v_filter] = {
                 "wave": cam_info["virtual_filters"][v_filter],
                 "mean": mean(
@@ -256,26 +298,26 @@ def polish_xcam_spectrum(
                     spectrum[comps[0] + "_ERR"] ** 2
                     + spectrum[comps[1] + "_ERR"] ** 2
                 ) ** 0.5
-    # construct dictionary of leftover real filter values
-    for real_filter in real_filters_to_use:
-        mean_value = spectrum.get(real_filter)
+    # construct dictionary of leftover  filter values
+    for _filter in _filters_to_use:
+        mean_value = spectrum.get(_filter)
         if mean_value is None:
             continue
-        if real_filter.lower().startswith("r"):
+        if _filter.lower().startswith("r"):
             eye_scale = righteye_scale
         else:
             eye_scale = lefteye_scale
-        values[real_filter] = {
-            "wave": cam_info["filters"][real_filter],
-            "mean": spectrum[real_filter] * eye_scale,
+        values[_filter] = {
+            "wave": cam_info["filters"][_filter],
+            "mean": spectrum[_filter] * eye_scale,
         }
-        if real_filter + "_STD" in spectrum.keys():
-            values[real_filter]["std"] = (
-                spectrum[real_filter + "_STD"] * eye_scale
+        if _filter + "_STD" in spectrum.keys():
+            values[_filter]["std"] = (
+                spectrum[_filter + "_STD"] * eye_scale
             )
-        if real_filter + "_ERR" in spectrum.keys():
-            values[real_filter]["iof_err"] = (
-                spectrum[real_filter + "_ERR"] * eye_scale
+        if _filter + "_ERR" in spectrum.keys():
+            values[_filter]["iof_err"] = (
+                spectrum[_filter + "_ERR"] * eye_scale
             )
 
     return dict(sorted(values.items(), key=lambda item: item[1]["wave"]))
@@ -427,7 +469,7 @@ BAND_TO_BAYER = {
 # TODO: de-vendor downstream (moved up to dustgoggles)
 def integerize(df):
     for column in numeric_columns(df):
-        if pd.api.types.is_integer_dtype(df[column].dtype):
+        if pd.api.types.is__dtype(df[column].dtype):
             continue
         isna, notna = split_on(df[column], df[column].isna())
         if not (notna.round() == notna).all():
@@ -695,7 +737,7 @@ def aggregate_across_filters(eye, melted, roi_name, rois):
     if isinstance(roi, pd.Series):
         roi = np.hstack(roi.to_numpy())
     # this performs stats twice (here and in the per-filter counting) in the
-    # degenerate case of ROIs drawn on only one filter, but this is not really
+    # degenerate case of ROIs drawn on only one filter, but this is not ly
     # a big deal.
     counts, position = roi_stats(roi), roi_position(rois[eye][roi_name])
     base_aggregate_stat = {
