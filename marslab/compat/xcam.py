@@ -151,13 +151,13 @@ FILTER_TO_RESOLUTION_FACTOR = {
 }
 
 # rules currently in use:
-# set of virtual filters === the set of pairs of  filters with nominal
+# set of virtual filters === the set of pairs of real filters with nominal
 # band centers within 5 nm of one another
 # the virtual mean reflectance in an ROI for a virtual filter is the
-# arithmetic mean of the mean reflectance values in that ROI for the two 
+# arithmetic mean of the mean reflectance values in that ROI for the two real
 # filters in its associated pair.
 # the nominal band center of a virtual filter is the arithmetic mean of the
-# nominal band centers of the two  filters in its associated pair.
+# nominal band centers of the two real filters in its associated pair.
 
 
 def make_xcam_filter_dict(abbreviation):
@@ -270,7 +270,7 @@ def polish_xcam_spectrum(
             lefteye_scale = filter_mean / scales[0]
             righteye_scale = filter_mean / scales[1]
 
-    _filters_to_use = list(cam_info["filters"].keys())
+    real_filters_to_use = list(cam_info["filters"].keys())
     # TODO: get rid of legacy _ERR fields
     if average_filters is True:
         # construct dictionary of averaged filter values
@@ -279,7 +279,7 @@ def polish_xcam_spectrum(
             # a pair are not present
             if not all([spectrum.get(comp) for comp in comps]):
                 continue
-            [_filters_to_use.remove(comp) for comp in comps]
+            [real_filters_to_use.remove(comp) for comp in comps]
             values[v_filter] = {
                 "wave": cam_info["virtual_filters"][v_filter],
                 "mean": mean(
@@ -299,8 +299,8 @@ def polish_xcam_spectrum(
                     spectrum[comps[0] + "_ERR"] ** 2
                     + spectrum[comps[1] + "_ERR"] ** 2
                 ) ** 0.5
-    # construct dictionary of leftover  filter values
-    for _filter in _filters_to_use:
+    # construct dictionary of leftover real filter values
+    for _filter in real_filters_to_use:
         mean_value = spectrum.get(_filter)
         if mean_value is None:
             continue
@@ -467,10 +467,11 @@ BAND_TO_BAYER = {
     },
 }
 
+
 # TODO: de-vendor downstream (moved up to dustgoggles)
 def integerize(df):
     for column in numeric_columns(df):
-        if pd.api.types.is__dtype(df[column].dtype):
+        if pd.api.types.is_integer_dtype(df[column].dtype):
             continue
         isna, notna = split_on(df[column], df[column].isna())
         if not (notna.round() == notna).all():
@@ -738,7 +739,7 @@ def aggregate_across_filters(eye, melted, roi_name, rois):
     if isinstance(roi, pd.Series):
         roi = np.hstack(roi.to_numpy())
     # this performs stats twice (here and in the per-filter counting) in the
-    # degenerate case of ROIs drawn on only one filter, but this is not ly
+    # degenerate case of ROIs drawn on only one filter, but this is not really
     # a big deal.
     counts, position = roi_stats(roi), roi_position(rois[eye][roi_name])
     base_aggregate_stat = {
