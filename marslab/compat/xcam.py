@@ -300,25 +300,25 @@ def polish_xcam_spectrum(
                     + spectrum[comps[1] + "_ERR"] ** 2
                 ) ** 0.5
     # construct dictionary of leftover real filter values
-    for _filter in real_filters_to_use:
-        mean_value = spectrum.get(_filter)
+    for real_filter in real_filters_to_use:
+        mean_value = spectrum.get(real_filter)
         if mean_value is None:
             continue
-        if _filter.lower().startswith("r"):
+        if real_filter.lower().startswith("r"):
             eye_scale = righteye_scale
         else:
             eye_scale = lefteye_scale
-        values[_filter] = {
-            "wave": cam_info["filters"][_filter],
-            "mean": spectrum[_filter] * eye_scale,
+        values[real_filter] = {
+            "wave": cam_info["filters"][real_filter],
+            "mean": spectrum[real_filter] * eye_scale,
         }
-        if _filter + "_STD" in spectrum.keys():
-            values[_filter]["std"] = (
-                spectrum[_filter + "_STD"] * eye_scale
+        if real_filter + "_STD" in spectrum.keys():
+            values[real_filter]["std"] = (
+                spectrum[real_filter + "_STD"] * eye_scale
             )
-        if _filter + "_ERR" in spectrum.keys():
-            values[_filter]["iof_err"] = (
-                spectrum[_filter + "_ERR"] * eye_scale
+        if real_filter + "_ERR" in spectrum.keys():
+            values[real_filter]["iof_err"] = (
+                spectrum[real_filter + "_ERR"] * eye_scale
             )
 
     return dict(sorted(values.items(), key=lambda item: item[1]["wave"]))
