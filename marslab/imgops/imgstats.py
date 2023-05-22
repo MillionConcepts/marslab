@@ -178,7 +178,7 @@ def fhplot(
     if len(array.shape) > 1:
         raise ValueError("this function only plots 1D arrays.")
     if vrange is None:
-        vrange = (array.min(), array.max())
+        vrange = (array.min(), array.max() * 1.001)
     counts = fh.histogram1d(array, bins=bins, range=vrange)
     bin_positions = np.linspace(*vrange, bins + 1)
     if ax is None:
