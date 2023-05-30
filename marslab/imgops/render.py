@@ -314,6 +314,8 @@ def _tformat(number, order, precision):
     if order > 2:
         formatted = ("{:." + str(precision) + "e}").format(number)
         return "".join([formatted[:-2], formatted[-1]])
+    if order + precision < 0:
+        return round(number)
     return round(number, order + precision)
 
 
