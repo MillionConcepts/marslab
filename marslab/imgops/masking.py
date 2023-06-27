@@ -229,11 +229,15 @@ def refit_mask(
     return pluck_label(mask)
 
 
-def pick_valid_label(array, cutoffs):
+def pick_valid_label(array, cutoffs, nanmask=None):
     labels = label(array)
     for label_ix in np.unique(labels[0][labels[0] >= 1]):
         mask = labels == label_ix
-        if check_mask_validity(mask, **cutoffs) is True:
+        if nanmask is not None:
+            checkmask = np.logical_or(mask, nanmask)
+        else:
+            checkmask = mask
+        if check_mask_validity(checkmask, **cutoffs) is True:
             return mask
     return None
 
@@ -256,7 +260,7 @@ def superpixel_edges(
 def skymask(
     arrays,
     percentile=75,
-    edge_params=MappingProxyType({"sigma": 3}),
+    edge_params=MappingProxyType({"maximum": 5, "erosion": 3}),
     input_median=5,
     trace_maximum=5,
     cutoffs=MappingProxyType(
@@ -268,19 +272,28 @@ def skymask(
     trim_params=MappingProxyType({"trim": False}),
     clear=True,
     colorblock=False,
+    respect_mask=False
 ):
-    mean = maybe_filter(
-        _get_flat_mean(arrays, input_mask_dilation, normalize=input_stretch),
-        input_median
+    flat_mean = _get_flat_mean(
+        arrays, input_mask_dilation, normalize=input_stretch
     )
+    mean = maybe_filter(flat_mean, input_median)
+    if respect_mask is True:
+        mean[flat_mean.mask] = np.nan
     trace = ~outline(mean, **edge_params)
+    if respect_mask is True:
+        nanmask = maybe_filter(
+            flat_mean.mask.copy(), input_mask_dilation, filt=ndi.maximum_filter
+        )
+    else:
+        nanmask = None
     if percentile is not None:
         trace = np.logical_and(trace, centile_threshold(mean, percentile))
     if colorblock is True:
         trace[superpixel_edges(arrays)] = 0
     if trace_maximum is not None:
         trace = ndi.minimum_filter(trace, trace_maximum)
-    if (mask := pick_valid_label(trace, cutoffs)) is None:
+    if (mask := pick_valid_label(trace, cutoffs, nanmask)) is None:
         return _blank(mean.shape)
     mask = refit_mask(mask, clear, **trim_params)
     if floodfill is True:

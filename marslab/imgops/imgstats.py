@@ -165,7 +165,7 @@ def gradient_stats(
 
 
 def fhplot(
-    array, bins=128, vrange=None, ax=None, return_counts=False, **mpl_kwargs
+    array, bins=None, vrange=None, ax=None, return_counts=False, **mpl_kwargs
 ):
     try:
         import fast_histogram as fh
@@ -175,14 +175,23 @@ def fhplot(
             "The fast-histogram and maplotlib libraries must be installed to "
             "use marslab.imgops.imgstats.fhplot."
         )
+    if bins is None:
+        # TODO, maybe: inefficient; allow passing precalc
+        n_unique = len(np.unique(array))
+        max_exp = 8
+        for i in range(max_exp):
+            bins = 2 ** i
+            if bins > n_unique:
+                break
     if len(array.shape) > 1:
         raise ValueError("this function only plots 1D arrays.")
     if vrange is None:
-        vrange = (array.min(), array.max())
+        vrange = (array.min(), array.max() * 1.001)
     counts = fh.histogram1d(array, bins=bins, range=vrange)
     bin_positions = np.linspace(*vrange, bins + 1)
     if ax is None:
         ax = plt.gca()
+    mpl_kwargs = {'histtype': 'step'} | mpl_kwargs
     ax.hist(bin_positions[:-1], bin_positions, weights=counts, **mpl_kwargs)
     if return_counts is True:
         return ax, counts, bin_positions
