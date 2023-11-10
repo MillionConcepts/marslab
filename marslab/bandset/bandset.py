@@ -295,6 +295,7 @@ class BandSet:
         self,
         instructions: Collection[Mapping],
         autoload: bool = True,
+        timeout: Optional[float] = None
     ):
         # load images and filter instruction set for unavailable bands
         available_instructions = self.prep_look_set(instructions, autoload)
@@ -349,7 +350,12 @@ class BandSet:
                 log.info("generated " + op_name)
         if pool is not None:
             look_cache = wait_for_it(
-                pool, look_cache, log, message="generated ", as_dict=True
+                pool,
+                look_cache,
+                log,
+                message="generated ",
+                as_dict=True,
+                timeout=timeout
             )
             pool.terminate()
         self.looks |= look_cache
