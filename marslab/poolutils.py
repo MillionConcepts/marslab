@@ -83,7 +83,7 @@ def wait_for_it(
         callback = simple_log_callback(log, message)
     pool.close()
     if results is not None:
-        watch_pool(results, interval, callback. timeout)
+        watch_pool(results, interval, callback, timeout)
     pool.join()
     if as_dict:
         return {key: result.get() for key, result in results.items()}
