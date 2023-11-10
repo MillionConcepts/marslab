@@ -35,12 +35,17 @@ def watch_pool(
     result_map,
     interval: float = 0.1,
     callback: Optional[Callable] = None,
+    timeout: Optional[float] = None
 ):
+    start = time.time()
     in_readiness = {
         task: result.ready() for task, result in result_map.items()
     }
     task_report = ChangeReporter(in_readiness)
     while not all(in_readiness.values()):
+        if timeout is not None:
+            if time.time() - start > timeout:
+                raise TimeoutError
         in_readiness = {
             task_ix: result.ready() for task_ix, result in result_map.items()
         }
@@ -72,12 +77,13 @@ def wait_for_it(
     callback: Optional[Callable] = None,
     interval: float = 0.1,
     as_dict: bool = False,
+    timeout: Optional[float] = None
 ) -> Union[dict, list]:
     if (callback is None) and (log is not None):
         callback = simple_log_callback(log, message)
     pool.close()
     if results is not None:
-        watch_pool(results, interval, callback)
+        watch_pool(results, interval, callback. timeout)
     pool.join()
     if as_dict:
         return {key: result.get() for key, result in results.items()}
