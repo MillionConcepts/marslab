@@ -1,4 +1,5 @@
 """utilities for watching worker pools"""
+import os
 from collections.abc import Callable, Mapping
 import logging
 import time
@@ -6,7 +7,7 @@ from types import MappingProxyType
 from typing import Optional, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from multiprocessing import Pool
+    from multiprocessing import Pool, active_children
     from pathos.multiprocessing import ProcessPool
 
 
@@ -87,6 +88,9 @@ def wait_for_it(
             watch_pool(results, interval, callback, timeout)
         except TimeoutError:
             pool.terminate()
+            for c in active_children():
+                os.kill(c.pid, 30)
+            raise TimeoutError("Pool timed out")
     pool.join()
     if as_dict:
         return {key: result.get() for key, result in results.items()}
