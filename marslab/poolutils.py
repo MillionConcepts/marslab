@@ -2,12 +2,12 @@
 import os
 from collections.abc import Callable, Mapping
 import logging
+from multiprocessing import active_children, Pool
 import time
 from types import MappingProxyType
 from typing import Optional, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from multiprocessing import Pool, active_children
     from pathos.multiprocessing import ProcessPool
 
 
