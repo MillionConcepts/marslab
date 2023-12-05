@@ -7,7 +7,6 @@ dependencies:
   - pandas
   - matplotlib
   - git
-  - clize
   - pip
   - python-Levenshtein
   - scipy

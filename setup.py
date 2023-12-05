@@ -21,7 +21,6 @@ setup(
         "scipy",
         "dustgoggles",
         "fs",
-        "clize",
         "pandas",
         "more-itertools",
         "pathos",
