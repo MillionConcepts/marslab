@@ -22,6 +22,7 @@ from more_itertools import windowed
 WAVELENGTH_TO_FILTER = {
     "CCAM": {
         400: "400",
+        433: "433",
         440: "440",
         500: "500",
         535: "535",
