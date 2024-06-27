@@ -23,7 +23,8 @@ from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
             },
             fill=st.nothing(),
         ),
-        min_size=2,
+        min_size=3,
+        max_size=3
     ),
     contrast_stretch=st.one_of(
         st.none(),
@@ -34,17 +35,7 @@ from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
     ),
     special_constants=st.one_of(
         st.none(),
-        st.lists(finite_floats),
-        st.sets(finite_floats),
-        st.frozensets(finite_floats),
-        st.dictionaries(keys=finite_floats, values=finite_floats),
-        st.dictionaries(keys=finite_floats, values=st.none()).map(dict.keys),
-        st.dictionaries(keys=st.integers(), values=finite_floats).map(
-            dict.values
-        ),
-        st.dictionaries(keys=finite_floats, values=finite_floats).map(
-            ChainMap
-        ),
+        st.lists(finite_floats)
     ),
     sigma=st.one_of(st.none(), positive_finite_floats),
 )
@@ -56,12 +47,13 @@ def test_fuzz_decorrelation_stretch_nice(
     assume(all([not len(np.unique(channel)) == 1 for channel in channels]))
     # ridiculously large inputs relative to dtype we expect to cause errors
     assume(all([not np.isinf(np.std(channel)) for channel in channels]))
-
+    if special_constants is not None:
+        channels = [
+            np.ma.masked_where(np.isin(c, special_constants), c)
+            for c in channels
+        ]
     decorrelation_stretch(
-        channels=channels,
-        contrast_stretch=contrast_stretch,
-        special_constants=special_constants,
-        sigma=sigma,
+        channels=channels, contrast_stretch=contrast_stretch, sigma=sigma
     )
 
 
