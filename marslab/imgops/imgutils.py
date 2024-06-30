@@ -248,7 +248,7 @@ def normalize_range(
     inrange = tuple(
         map(lambda i: arr.dtype.type(i) if i is not None else i, inrange)
     )
-    if (do_clip is True) and set(inrange) != {None}:
+    if do_clip and set(inrange) != {None}:
         if inplace is True:
             arr = np.clip(arr, *inrange, out=arr)
         else:
@@ -266,6 +266,12 @@ def normalize_range(
         lambda s: np.array(s, arr.dtype.type), (inrange, bounds)
     )
     scale_up, scale_down = map(np.ptp, (bounds, inrange))
+    # TODO, maybe: messy
+    if arr.dtype.char in np.typecodes["AllFloat"]:
+        # nonsensical-looking but effective floating point OOB cheat
+        smax = (inrange[1] - inrange[0]) * scale_up / scale_down + bounds[0]
+        if smax > bounds[1]:
+            scale_up *= (1 + (bounds[1] - smax))
     if inplace is True:
         arr -= inrange[0]
         arr *= scale_up
