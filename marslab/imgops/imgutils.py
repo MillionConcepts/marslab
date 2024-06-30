@@ -213,10 +213,9 @@ def find_unmasked_bounds(image, cheat_low, cheat_high):
     return minimum, maximum
 
 
-# TODO: address rollover issues
 def normalize_range(
     arr: np.ndarray,
-    bounds: Sequence[int] = (0, 1),
+    bounds: Sequence[int] = (0., 1.),
     stretch: Union[float, tuple[float, float], None] = None,
     inplace: bool = False,
 ) -> np.ndarray:
