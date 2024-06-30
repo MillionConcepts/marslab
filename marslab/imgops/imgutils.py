@@ -20,7 +20,24 @@ from dustgoggles.structures import dig_for_values
 import numpy as np
 
 
-def absolutely_destroy(thing, delay_collect=False):
+# TODO: maybe does not belong in this module
+# TODO, maybe: add even more stuff -- try to run .close(), etc.
+def absolutely_destroy(
+    thing: Union[MutableMapping, MutableSequence], delay_collect: bool = False
+) -> None:
+    """
+    Object-clearing utility intended primarily but not exclusively for mutable
+    collections of matplotlib objects.
+
+    Clear the contents of `thing`, which may be a list-like or dict-like
+    object; then, close all matplotlib figures (if matplotlib.pyplot is
+    loaded); then (if `delay_collect` is False), run gc.collect().
+
+    This throw-things-at-the-wall approach is intended to trigger various
+    destructor behaviors for collections and elements of collections that may
+    not respond as expected to methods such as .clear() and .close(), and may
+    enjoy creating reference cycles.
+    """
     if isinstance(thing, MutableMapping):
         keys = list(thing.keys())
         for key in keys:
@@ -34,8 +51,23 @@ def absolutely_destroy(thing, delay_collect=False):
         gc.collect()
 
 
-def eightbit(array, stretch=(0, 0)):
-    """return an eight-bit version of an array"""
+def eightbit(
+    array: np.ndarray, stretch: Union[float, tuple[float, float], None] = None
+) -> np.ndarray:
+    """
+    Return an 'eight-bit' (single-byte unsigned integer, uint8, u1, etc.)
+    version of an array scaled to (0, 255); optionally, stretch (range-clip)
+    it inline. Intended primarily for converting arrays to RGBA-compatible
+    value ranges.
+
+    If `array` is already uint8, does not modify it unless stretch is not None,
+    in which case it will map its min/max values to 0/255 (optionally
+    stretched) as with any other input array.
+    """
+    if array.dtype.char == 'B' and stretch is None:
+        return array
+    if array.dtype.char == 'B':
+        return normalize_range(array, (0, 255), stretch)
     return np.round(normalize_range(array, (0, 255), stretch)).astype(np.uint8)
 
 
@@ -137,13 +169,13 @@ def find_masked_bounds(image, cheat_low, cheat_high):
     relatively memory-efficient way to perform bound calculations for
     normalize_range on a masked array.
     """
-    if isinstance(image.mask, np.bool_):
-        if image.mask:
-            valid = np.array([])
-        else:
-            valid = image.data
+    if image.mask is np.False_:
+        valid = image.data
     else:
         valid = image[~image.mask].data
+    # NOTE: unlike its relative in `pdr.browsify`, this function does not
+    #  assume that the masked array it receives has already been masked
+    #  where invalid.
     valid = valid[np.isfinite(valid)]
     if valid.size == 0:
         return None, None
@@ -183,9 +215,9 @@ def find_unmasked_bounds(image, cheat_low, cheat_high):
 
 # TODO: address rollover issues
 def normalize_range(
-    image: np.ndarray,
+    arr: np.ndarray,
     bounds: Sequence[int] = (0, 1),
-    stretch: Union[float, tuple[float, float]] = 0,
+    stretch: Union[float, tuple[float, float], None] = None,
     inplace: bool = False,
 ) -> np.ndarray:
     """
@@ -193,39 +225,67 @@ def normalize_range(
     stretch = (low_percentile, 100 - high_percentile). if inplace is True,
     may transform the original array, with attendant memory savings and
     destructive effects.
+
+    Setting bounds[0] >= bounds[1] may cause undesired effects.
+
+    Attempts to maintain dtype of the input array, but will cast if required
+    to match bounds. Note that the inplace argument is effectively ignored in
+    that case.
+
+    Always ignores masked data in an array when computing scale.
+    Arrays with nan values will always return an array of np.nan. Arrays with
+    -inf and/or inf values will clip those values to bounds[0] and bounds[1]
+    respectively.
     """
-    if isinstance(stretch, Sequence):
-        cheat_low, cheat_high = stretch
+    if not isinstance(stretch, Sequence):
+        stretch = (stretch, stretch)
+    stretch = np.array([0 if i is None else i for i in stretch])
+    stretch = np.clip(stretch, 0, 100)
+    do_clip = max(stretch) > 0
+    if isinstance(arr, np.ma.MaskedArray):
+        inrange = find_masked_bounds(arr, *stretch)
     else:
-        cheat_low, cheat_high = (stretch, stretch)
-    range_min, range_max = bounds
-    if isinstance(image, np.ma.MaskedArray):
-        minimum, maximum = find_masked_bounds(image, cheat_low, cheat_high)
-        if minimum is None:
-            return image
-    else:
-        minimum, maximum = find_unmasked_bounds(image, cheat_low, cheat_high)
-    if not ((cheat_high is None) and (cheat_low is None)):
+        inrange = find_unmasked_bounds(arr, *stretch)
+    inrange = tuple(
+        map(lambda i: arr.dtype.type(i) if i is not None else i, inrange)
+    )
+    if (do_clip is True) and set(inrange) != {None}:
         if inplace is True:
-            image = np.clip(image, minimum, maximum, out=image)
+            arr = np.clip(arr, *inrange, out=arr)
         else:
-            image = np.clip(image, minimum, maximum)
+            arr = np.clip(arr, *inrange)
+    mintype = reduce(
+        np.promote_types,
+        filter(None, map(np.min_scalar_type, (*inrange, *bounds)))
+    )
+    if not np.can_cast(mintype, arr.dtype):
+        arr = arr.astype(mintype)
+    # Note that this case will only occur for all-masked input array
+    if set(inrange) == {None}:
+        return np.clip(arr, *bounds)
+    inrange, bounds = map(
+        lambda s: np.array(s, arr.dtype.type), (inrange, bounds)
+    )
+    scale_up, scale_down = map(np.ptp, (bounds, inrange))
     if inplace is True:
-        # perform the operation in-place
-        image -= minimum
-        image *= range_max - range_min
-        if image.dtype.char in np.typecodes["AllInteger"]:
+        arr -= inrange[0]
+        arr *= scale_up
+        if arr.dtype.char in np.typecodes["AllInteger"]:
             # this loss of precision is probably better than
             # automatically typecasting it.
-            # TODO: detect rollover cases, etc.
-            image //= maximum - minimum
+            # TODO, maybe: cute inplace rounding
+            arr //= scale_down
         else:
-            image /= maximum - minimum
-        image += range_min
-        return image
-    return (image - minimum) * (range_max - range_min) / (
-        maximum - minimum
-    ) + range_min
+            arr /= scale_down
+        arr += bounds[0]
+        return arr
+    elif arr.dtype.char in np.typecodes["AllInteger"]:
+        return (
+            ((arr - inrange[0]) * scale_up) // scale_down + bounds[0]
+        )
+    return (
+        (arr - inrange[0]) * scale_up / scale_down + bounds[0]
+    )
 
 
 def enhance_color(image: np.ndarray, bounds, stretch):
