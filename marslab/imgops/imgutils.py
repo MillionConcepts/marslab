@@ -5,6 +5,7 @@ import gc
 import sys
 from functools import partial, reduce
 from itertools import chain
+from numbers import Number
 from operator import mul
 from typing import (
     Callable,
@@ -13,7 +14,7 @@ from typing import (
     Collection,
     Mapping,
     Union,
-    MutableSequence,
+    MutableSequence, Any, Hashable, Optional,
 )
 
 from dustgoggles.func import gmap
@@ -216,10 +217,10 @@ def find_unmasked_bounds(image, cheat_low, cheat_high):
 
 def normalize_range(
     arr: np.ndarray,
-    bounds: Sequence[int] = (0., 1.),
+    bounds: tuple[Number, Number] = (0., 1.),
     stretch: Union[float, tuple[float, float], None] = None,
     inplace: bool = False,
-) -> np.ndarray:
+) -> Union[np.ndarray, np.ma.MaskedArray]:
     """
     simple linear min-max scaler that optionally percentile-clips the input at
     stretch = (low_percentile, 100 - high_percentile). if inplace is True,
@@ -310,7 +311,7 @@ def clip_finite(image, a_min: int, a_max: int):
     return result.data
 
 
-def std_clip(arr: np.ndarray, sigma: float = 1) -> np.ndarray:
+def std_clip(arr: np.ndarray, sigma: Number = 1) -> np.ndarray:
     """
     simple clipping function that clips at multiples of an array's standard
     deviation offset from its mean
@@ -327,7 +328,7 @@ def std_clip(arr: np.ndarray, sigma: float = 1) -> np.ndarray:
 
 
 def centile_clip(
-    arr: np.ndarray, centiles: tuple[float, float] = (1, 99)
+    arr: np.ndarray, centiles: tuple[Number, Number] = (1, 99)
 ) -> np.ndarray:
     """
     simple clipping function that clips values above and below a given
@@ -365,11 +366,28 @@ def minmax_clip(arr: np.ndarray, stretch: tuple[float, float] = (0, 0)):
     return result.data
 
 
-def sinh_scale(array, bounds=(0, 1), stretch=1):
-    minimum, maximum = array.min(), array.max()
-    scaled = (array - minimum) / (maximum - minimum) - 0.5
-    expanded = np.sinh(scaled * stretch)
-    return normalize_range(expanded, bounds)
+def sinh_scale(
+    arr: np.ndarray,
+    bounds: tuple[Number, Number] = (0., 1.),
+    stretch: float = 1
+) -> np.ndarray:
+    """
+    Applies a simple hyperbolic sine stretch to the input array. Maintains
+    the dtype of the input array if it is floating-point; otherwise, converts
+    it to float64.
+    """
+    finite = np.ma.masked_invalid(arr)
+    fmin, fmax = finite.min(), finite.max()
+    scaling = 1 / (fmax - fmin)
+    if arr.dtype.char in np.typecodes["AllFloat"]:
+        scaling = arr.dtype.type(scaling)
+    normed = normalize_range(
+        np.sinh((finite - fmin) * scaling * stretch - 0.5), bounds
+    )
+    if isinstance(arr, np.ma.masked_array):
+        return np.ma.masked_array(normed, mask=normed.mask + arr.mask)
+    # noinspection PyTypeChecker
+    return normed.data
 
 
 # TODO: would it be better for these functions to use flat mask arrays
@@ -460,7 +478,18 @@ def apply_image_filter(image, image_filter=None):
     return image_filter["function"](image, **image_filter.get("params", {}))
 
 
-def mapfilter(predicate, key, map_sequence):
+# TODO, maybe: doesn't really go in this module
+def mapfilter(
+    predicate: Callable[[Any], bool],
+    key: Optional[Hashable],
+    map_sequence: Sequence[Mapping]
+) -> list[Mapping]:
+    """
+    Return a list containing all elements of map_sequence such that, if `key`
+    is None, `predicate(element)` is True, or if `key` is not None,
+    `predicate(element.get(key))` is True.
+    Intended primarily as a helper function for picking looks.
+    """
     new_sequence = []
     for mapping in map_sequence:
         obj = mapping if key is None else mapping.get(key)
@@ -469,7 +498,17 @@ def mapfilter(predicate, key, map_sequence):
     return new_sequence
 
 
-def make_mask_passer(func, mask_nans=True):
+def make_mask_passer(
+    func: Callable[[np.ndarray, ...], np.ndarray],
+    mask_nans=True
+) -> Callable[[np.ndarray, ...], np.ndarray]:
+    """
+    Function decorator for functions that take at least a single positional
+    ndarray argument. Returns a function that attempts to restore the masks of
+    any MaskedArray passed as the first argument after passing it (and all
+    other arguments) to the decorated function. Will of course fail if `func`
+    mutates the mask inplace or similar. Optionally, also mask nans inline.
+    """
     def mask_passer(array, *args, **kwargs):
         transformed = func(array, *args, **kwargs)
         if isinstance(array, np.ma.MaskedArray):
@@ -482,7 +521,8 @@ def make_mask_passer(func, mask_nans=True):
     return mask_passer
 
 
-def get_all_bands(instruction: Mapping):
+# TODO, maybe: doesn't really go in this module.
+def get_all_bands(instruction: Mapping) -> chain:
     """
     helper function for look set analysis: get all bands mentioned in an
     instructions, including an instructions with nested bands
@@ -490,7 +530,8 @@ def get_all_bands(instruction: Mapping):
     return chain.from_iterable(dig_for_values(instruction, "bands"))
 
 
-def get_all_bands_from_all(instructions: Collection[Mapping]):
+# TODO, maybe: doesn't really go in this module.
+def get_all_bands_from_all(instructions: Collection[Mapping]) -> set:
     """
     helper function for look set analysis: get all bands mentioned in all
     instructions, including from instructions with nested bands
@@ -498,7 +539,14 @@ def get_all_bands_from_all(instructions: Collection[Mapping]):
     return set(chain.from_iterable(map(get_all_bands, instructions)))
 
 
-def closest_ratio(integer, target):
+def closest_ratio(integer: int, target: float) -> tuple[int, int]:
+    """
+    Returns (x, y) satisfying the condition:
+    abs((x / y) - `factor`) <= abs((a / b) - `factor`) for all a, b such that
+    a * b = `integer`.
+
+    Intended primarily for computing optional aspect ratios.
+    """
     from sympy import factorint
 
     factors = tuple(
