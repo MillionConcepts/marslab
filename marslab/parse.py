@@ -1,21 +1,27 @@
-# Functions for parsing the metadata out of Mars 2020 observational data filenames
+"""
+Functions for parsing embedded metadata from Mars 2020 observational data filenames
 
-# This code is derived exclusively from information in
-# "D-99960 M2020 Camera EDR/RDR Data Products SIS Version 2.0 (Draft)"
-# (https://pds-imaging.jpl.nasa.gov/reviews/mars2020/mars2020_mission/document_camera/Mars2020_Camera_SIS.pdf)
-
-import string
+This code is derived exclusively from information in
+"D-99960 M2020 Camera EDR/RDR Data Products SIS Version 2.0 (Draft)"
+(https://pds-imaging.jpl.nasa.gov/reviews/mars2020/mars2020_mission/document_camera/Mars2020_Camera_SIS.pdf)
+"""
 import itertools
+import string
+from typing import Literal
 
 import pandas as pd
 
+PType = Literal["IMAGE", "MOSAIC"]
+"""Defined M20 imaging product subtypes currently supported by this module."""
+
+
 
 def suite(inst):
-    return
+    raise NotImplementedError
 
 
-def instrument(fn, ptype="IMAGE"):
-    # Valid values of ptype are ["IMAGE","MOSAIC1","MOSAIC2","MESH"]
+def instrument(fn: str, ptype: PType = "IMAGE") -> str:
+    """Return the full instrument name implied by a filename."""
     if ptype == "IMAGE":
         return {
             "FL": "Front Hazcam Left (RCE-A)",
@@ -67,7 +73,7 @@ def instrument(fn, ptype="IMAGE"):
             "XM": "RIMFAX Mobile",
             "XS": "RIMFAX Stationary",
         }[fn[0:2]]
-    elif ptype.startswith("MOSAIC"):
+    elif ptype == "MOSAIC":
         return {
             "N": "Navcam",
             "Z": "Mastcam-Z",
@@ -83,13 +89,11 @@ def instrument(fn, ptype="IMAGE"):
             "X": "Use when there are more than two instruments",
             "_": "N/A",  # Use when there is only one instrument
         }[fn[0:1] if ptype.endswith("1") else fn[1:2]]
-    elif ptype == "MESH":
-        return "TBD"
-    else:
-        raise (f"Unknown filename type: {ptype}")
+    raise NotImplementedError(f"Unsupported filename type: {ptype}")
 
 
-def color_filter(fn, ptype="IMAGE"):
+def color_filter(fn, ptype: PType = "IMAGE") -> str:
+    """Return the color filter implied by a filename."""
     # Only “E”, “F”, or “M” or Filter/LED can appear in EDRs.
     if ptype == "IMAGE":
         if "PIXL" in instrument(fn):
@@ -104,7 +108,6 @@ def color_filter(fn, ptype="IMAGE"):
                 "_": "LED Off",
             }[fn[2:3]]
         elif ("Mastcam" in instrument(fn)) and (fn[2:3] in "01234567"):
-
             return {
                 "L0": "L0 (530nm)",
                 "L1": "L1 (800nm)",
@@ -178,18 +181,20 @@ def color_filter(fn, ptype="IMAGE"):
             "S": "Band 2 HSI",
             "I": "Band 3 HSI",
         }[fn[3:6]]
+    raise ValueError(f"color filters not supported for {ptype}")
 
 
-def special_flag(fn, ptype="IMAGE"):
+def special_flag(fn: str, ptype: PType = "IMAGE") -> str:
+    """Return the 'special' flag, if any, implied by a filename"""
     if ptype == "IMAGE":
         return "N/A" if fn[3:4] == "_" else [fn[3:4]]
     elif ptype == "MOSAIC":
         return "Nominal" if fn[6:7] == "_" else fn[6:7]
-    else:
-        raise (f"Unknown filename type: {ptype}")
+    raise ValueError(f"Special flags not supported for {ptype}")
 
 
-def sol(fn, ptype="IMAGE"):
+def sol(fn, ptype: PType = "IMAGE"):
+    """Extract the sol (if any) from a filename."""
     if ptype == "IMAGE":
         if fn[4:8][0] in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":  # Flight or ground test
             return f"{fn[4:8]} - TRANSLATION TO BE DONE"
@@ -197,9 +202,13 @@ def sol(fn, ptype="IMAGE"):
             return int(fn[4:8])  # Either flight or test Sol number
     elif ptype == "MOSAIC":
         return "Nominal" if fn[6:7] == "_" else fn[6:7]
+    raise NotImplementedError(f"Sol decoding not implemented for {ptype}")
 
 
-def venue(fn, ptype="IMAGE"):
+def venue(fn: str, ptype: PType = "IMAGE"):
+    """Extract the venue from a filename."""
+    if ptype not in ("IMAGE", "MOSAIC"):
+        raise NotImplementedError(f"Venue not supported for {ptype}")
     return {
         "_": "Flight",  # (surface or cruise)
         "A": "AVSTB",
@@ -212,18 +221,23 @@ def venue(fn, ptype="IMAGE"):
     }[{"IMAGE": fn[8:9], "MOSAIC": fn[15:16]}[ptype]]
 
 
-def secondary_timestamp(fn):  # fn[9:19]) # SCLK
+def secondary_timestamp(fn: str) -> int:
+    """Extract SCLK (spacecraft clock epoch time) value from a filename"""
     return int(fn[9:19])
     # Note that there is a special calculation to dial this in precisely
     #  for sequences of ZCAM and SHERLOCK images which will
     #  all have the same SCLK as the first in the sequence
 
 
-def tertiary_timestamp(fn):  # fn[20:23]) # SCLK Milliseconds
+def tertiary_timestamp(fn: str) -> int:
+    """Extract SCLK milliseconds from a filename"""
     return int(fn[20:23])
 
 
-def product_type(fn, ptype="IMAGE"):  # fn[23:26])
+def product_type(fn: str, ptype: PType = "IMAGE") -> str:
+    """Extract instrument-specific product type code from a filename."""
+    if ptype not in ("IMAGE", "MOSAIC"):
+        raise NotImplementedError(f"product_type not supported for {ptype}")
     val = {"IMAGE": fn[23:26], "MOSAIC": fn[12:15]}[ptype]
     return val
 

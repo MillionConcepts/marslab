@@ -1,4 +1,7 @@
-"""utilities for watching worker pools"""
+"""
+Utilities for watching worker pools. Can be used for progress updates, logging,
+etc.
+"""
 import os
 from collections.abc import Callable, Mapping
 import logging
@@ -12,6 +15,10 @@ if TYPE_CHECKING:
 
 
 class ChangeReporter:
+    """
+    Simple class for monitoring changes in a dict or other mapping.
+    """
+
     def __init__(self, mapping: Mapping):
         self.state = MappingProxyType(mapping)
         self.reference = mapping
@@ -33,11 +40,11 @@ class ChangeReporter:
 
 
 def watch_pool(
-    result_map,
+    result_map: Mapping,
     interval: float = 0.1,
     callback: Optional[Callable] = None,
     timeout: Optional[float] = None
-):
+) -> Mapping:
     start = time.time()
     in_readiness = {
         task: result.ready() for task, result in result_map.items()
