@@ -16,6 +16,7 @@ from typing import (
     MutableSequence,
 )
 
+from dustgoggles.func import gmap
 from dustgoggles.structures import dig_for_values
 import numpy as np
 
@@ -309,51 +310,58 @@ def clip_finite(image, a_min: int, a_max: int):
     return result.data
 
 
-def std_clip(image, sigma=1):
+def std_clip(arr: np.ndarray, sigma: float = 1) -> np.ndarray:
     """
     simple clipping function that clips at multiples of an array's standard
     deviation offset from its mean
     """
-    finite = np.ma.masked_invalid(image)
-    mean = np.ma.mean(finite)
-    std = np.ma.std(finite)
-    result = np.ma.clip(finite, *(mean - std * sigma, mean + std * sigma))
-    if isinstance(image, np.ma.MaskedArray):
-        return result
+    finite = np.ma.masked_invalid(arr)
+    mean, shift = np.ma.mean(finite), np.ma.std(finite) * sigma
+    clips = np.array([mean - shift, mean + shift], dtype=arr.dtype)
+    result = np.ma.clip(finite, *clips)
+    if isinstance(arr, np.ma.MaskedArray):
+        return np.ma.masked_array(result.data, mask=(arr.mask + result.mask))
+    # NOTE: np typestubs suggest MaskedArray.data is a memoryview, but it's not
+    # noinspection PyTypeChecker
     return result.data
 
 
-def centile_clip(image, centiles=(1, 99)):
+def centile_clip(
+    arr: np.ndarray, centiles: tuple[float, float] = (1, 99)
+) -> np.ndarray:
     """
     simple clipping function that clips values above and below a given
     percentile range
     """
-    finite = np.ma.masked_invalid(image)
+    finite = np.ma.masked_invalid(arr)
     bounds = np.percentile(finite[~finite.mask].data, centiles)
-    result = np.ma.clip(finite, *bounds)
-    if isinstance(image, np.ma.MaskedArray):
-        return result
+    result = np.ma.clip(finite, *(bounds.astype(arr.dtype)))
+    if isinstance(arr, np.ma.MaskedArray):
+        return np.ma.masked_array(result.data, mask=(arr.mask + result.mask))
+    # NOTE: np typestubs suggest MaskedArray.data is a memoryview, but it's not
+    # noinspection PyTypeChecker
     return result.data
 
 
-def minmax_clip(image, stretch=(0, 0)):
+def minmax_clip(arr: np.ndarray, stretch: tuple[float, float] = (0, 0)):
     """
-    simple minmax clip that optionally cheats 0 up and 1 down at multiples
-    of an array's dynamic range
+    simple minmax clip to cheat min and max up and down at multiples of an
+    array's dynamic range. always returns a copy.
     """
-    finite = np.ma.masked_invalid(image)
-    if stretch != (0, 0):
-        dynamic_range = finite.max() - finite.min()
-        cheat_low, cheat_high = stretch
-    else:
-        dynamic_range, cheat_low, cheat_high = (0, 0, 0)
-    result = np.clip(
-        image,
-        image.min() + dynamic_range * cheat_low,
-        image.max() - dynamic_range * cheat_high,
+    if max(stretch) == 0:
+        return arr.copy()
+    if max(stretch) > 1:
+        raise ValueError("Stretch bounds must be between 0 and 1 inclusive.")
+    finite = np.ma.masked_invalid(arr)
+    fmin, fmax = finite.min(), finite.max()
+    ptp = fmax - fmin
+    result = np.ma.clip(
+        finite,
+        finite.dtype.type(fmin + stretch[0] * ptp),
+        finite.dtype.type(fmax - stretch[1] * ptp)
     )
-    if isinstance(image, np.ma.MaskedArray):
-        return result
+    if isinstance(arr, np.ma.MaskedArray):
+        return np.ma.masked_array(result.data, mask=(arr.mask + result.mask))
     return result.data
 
 
