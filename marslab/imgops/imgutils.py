@@ -17,9 +17,9 @@ from typing import (
     MutableSequence, Any, Hashable, Optional,
 )
 
-from dustgoggles.func import gmap
 from dustgoggles.structures import dig_for_values
 import numpy as np
+from numpy.typing import ArrayLike
 
 
 # TODO: maybe does not belong in this module
@@ -507,7 +507,8 @@ def make_mask_passer(
     ndarray argument. Returns a function that attempts to restore the masks of
     any MaskedArray passed as the first argument after passing it (and all
     other arguments) to the decorated function. Will of course fail if `func`
-    mutates the mask inplace or similar. Optionally, also mask nans inline.
+    mutates the mask inplace or similar. Optionally (and by default), also
+    mask NaNs inline.
     """
     def mask_passer(array, *args, **kwargs):
         transformed = func(array, *args, **kwargs)
@@ -522,6 +523,7 @@ def make_mask_passer(
 
 
 # TODO, maybe: doesn't really go in this module.
+# TODO, maybe: this probably shouldn't actually return an iterator.
 def get_all_bands(instruction: Mapping) -> chain:
     """
     helper function for look set analysis: get all bands mentioned in an
@@ -541,11 +543,10 @@ def get_all_bands_from_all(instructions: Collection[Mapping]) -> set:
 
 def closest_ratio(integer: int, target: float) -> tuple[int, int]:
     """
-    Returns (x, y) satisfying the condition:
-    abs((x / y) - `factor`) <= abs((a / b) - `factor`) for all a, b such that
-    a * b = `integer`.
+    Return (x, y) satisfying the condition:
 
-    Intended primarily for computing optional aspect ratios.
+    abs((x / y) - `factor`) <= abs((a / b) - `factor`)
+    for all a, b such that a * b == `integer`.
     """
     from sympy import factorint
 
@@ -587,53 +588,109 @@ def closest_ratio(integer: int, target: float) -> tuple[int, int]:
             return p, fact
 
 
-def closest_aspect(new_size, aspect_ratio):
-    _, factors = closest_ratio(new_size, aspect_ratio)
+def closest_aspect(size: int, aspect_ratio: float) -> tuple[int, int]:
+    """
+    Given an array size and a desired aspect ratio, find the integer values
+    for width and height that most closely approximate the ratio.
+    """
+    _, factors = closest_ratio(size, aspect_ratio)
     left, right = factors
     return reduce(mul, right), reduce(mul, left)
 
 
-def strict_reshape(array, aspect_ratio):
+def strict_reshape(array: np.ndarray, aspect_ratio: float) -> np.ndarray:
+    """
+    Return a copy of `array` reshaped such that its aspect ratio is as close
+    as possible to `aspect_ratio` (without discarding or adding any elements).
+    """
     return array.reshape(closest_aspect(array.size, aspect_ratio))
 
 
-def ravel_valid(array, copy=True):
-    values = array.ravel()
-    if isinstance(values, np.ma.MaskedArray):
-        if copy is True:
-            values = values.copy()
-        values[values.mask] = np.nan
-        return values[np.isfinite(values)].data
-    return values[np.isfinite(values)]
+def ravel_valid(arr: np.ndarray) -> np.ndarray:
+    """
+    Return a raveled (i.e. flattened, 1-D) copy of `arr` with all 'invalid'
+    elements discarded, where 'invalid' means nonfinite and/or (if `arr`
+    is a `MaskedArray`) masked.
+
+    Intended primarily as a convenience for aggregate statistical operations,
+    particularly operations that use library functions that don't like inf/nan
+    and/or don't respect masks.
+    """
+    raveled = arr.ravel()
+    if (
+        arr.dtype.char in np.typecodes["AllInteger"]
+        and not isinstance(arr, np.ma.MaskedArray)
+    ):
+        # this case can't actually have 'invalid' values and it is a waste of
+        # time to check for them
+        return raveled
+    if isinstance(raveled, np.ma.MaskedArray):
+        return raveled[np.isfinite(raveled) + raveled.mask].data
+    return raveled[np.isfinite(raveled)]
 
 
-def setmask(array, value, copy=True):
-    if not isinstance(array, np.ma.MaskedArray):
-        return array
+rv = ravel_valid
+"""alias for `ravel_valid()`."""
+
+
+def setmask(arr: np.ndarray, value: Any, copy: bool = True) -> np.ndarray:
+    """
+    Convenience wrapper/handler for MaskedArray.fill() and
+    MaskedArray.filled() that also doesn't attempt to mess with non-masked
+    arrays.
+
+    Returns a (non-masked) array like `arr`, but with all masked elements
+    replaced with `value`. If `copy`  is True, calls `arr.filled()` (which
+    creates a copy of `arr`); otherwise, calls `arr.fill()` (which modifies
+    `arr.data` inplace).
+
+    If `arr` is _not_ a MaskedArray, this simply returns `arr` if `copy` is
+    False, and `arr.copy()` if `copy` is True.
+
+    Note: Does not attempt to typecast `arr` to match `value` or vice versa.
+     Will throw an exception on numpy>=2.0.0 if `value` is incompatible with
+     `arr.dtype`.
+    """
+    if not isinstance(arr, np.ma.MaskedArray):
+        return arr if copy is False else arr.copy()
     if copy is True:
-        data = array.data.copy()
-    else:
-        data = array.data
-    data[array.mask] = value
-    return data
+        return arr.filled(value)
+    arr.fill(value)
+    return arr.data
 
 
-def zero_mask(array, copy=True):
-    return setmask(array, 0, copy)
+def zero_mask(arr: np.ndarray, copy: bool = True) -> np.ndarray:
+    """Alias for `setmask(arr, 0, copy)`"""
+    return setmask(arr, 0, copy)
 
 
-def nanmask(array, copy=True):
-    return setmask(array, np.nan, copy)
+def nanmask(arr: np.ndarray, copy: bool = True) -> np.ndarray:
+    """Alias for `setmask(arr, np.nan, copy)`"""
+    return setmask(arr, np.nan, copy)
 
 
-def make_mask_canvas(image, unmasked_alpha=1, masked_alpha=0):
-    canvas = np.full(image.shape[:2], unmasked_alpha, dtype="float16")
-    if len(image.shape) > 2:
+def make_mask_canvas(
+    image: np.ma.MaskedArray,
+    unmasked_alpha: float = 1,
+    mask_alpha: float = 0
+) -> np.ndarray:
+    """
+    Creates a half-float array shaped like the first two dimensions of `image`,
+    which must be a 2D or 3D ndarray.
+
+    The 'canvas' array's elements are `masked_alpha` where `image.mask` is True
+    (True in any 'channel'/'band', if `image` is 3D), and 'unmasked_alpha'
+    elsewhere.
+
+    This can be used to create an alpha channel or as a sort of stencil.
+    """
+    if image.ndim == 3:
         mask = image.mask.sum(axis=-1).astype(bool)
-    else:
+    elif image.ndim == 2:
         mask = image.mask
-    canvas[mask] = masked_alpha
-    return canvas
+    else:
+        raise ValueError("`image` must be 2D or 3D")
+    return np.where(mask, np.float16(mask_alpha), np.float16(unmasked_alpha))
 
 
 def colorfill_maskedarray(
@@ -681,7 +738,18 @@ def colorfill_maskedarray(
     )
 
 
-def maskwhere(images, constants):
+def maskwhere(
+    images: Sequence[np.ndarray], constants: Collection[ArrayLike]
+) -> list[np.ndarray]:
+    """
+    Return a list of boolean ndarrays corresponding to `images` such that
+    the i-th element of that list is true where `images[i]` is in constants
+    and false elsewhere.
+
+    Intended primarily as a convenience function for producing special constant
+    masks for a group of related images.
+    """
+    # noinspection PyTypeChecker
     return reduce(np.logical_or, [np.isin(i, constants) for i in images])
 
 
