@@ -7,11 +7,12 @@ definitions from PDS3 labels in order to facilitate easy transformations from,
 e.g., the SOME_INSTRUMENT frame to the SITE frame to the SOME_OTHER_INSTRUMENT
 frame.
 """
+import re
 from itertools import product
 from functools import reduce
 from numbers import Real
 from operator import or_
-from typing import Optional, Union, Literal
+from typing import Optional, Union, Literal, Sequence
 
 from dustgoggles.func import is_it
 from dustgoggles.structures import NestingDict, get_from
@@ -20,6 +21,21 @@ import pandas as pd
 import pdr
 from numpy.typing import ArrayLike
 
+Quaternion = Sequence[Real]
+"""
+Simple alias to clarify type hints. Denotes a quaternion expressed in the form
+used by functions in this module. (Note that most functions in this module that
+return a Quaternion express it as a list.)
+
+Although not formally expressed by this hint, a Quaternion object should always
+be a size-4 1D sequence whose elements are of a types interpretable as real
+numbers, where the first element represents the scalar part and the remaining
+elements represent the basis part; i.e., 
+`quat: Quaternion = np.array([a, b, c, d])` represents the quaternion (a, v),
+where a is a real number and [b, c, d] is an element of ℝ3 (the real coordinate
+space of dimension 3); or, expressed differently, a + b * i + c * j + d * k, 
+where (i, j, k) are the basis elements of a real vector space.
+"""
 
 UnitOfAngle = Literal["degrees", "radians", "deg", "rad"]
 
@@ -49,9 +65,13 @@ def get_coordinate_system_properties(
     `frame_name` from a PDS3-labeled product.
     If there is no coordinate system named `frame_name`, returns None.
     """
-    system = data.metaget(f"{frame_name}_COORDINATE_SYSTEM")
-    if system is None:
+    syskeys = [
+        k for k in data.metadata.fieldcounts
+        if re.match(f"{frame_name}_COORD(INATE)?_SYSTEM(_PARMS)?$", k)
+    ]
+    if len(syskeys) == 0:
         return None
+    system = data.metaget(syskeys[0])
     return {
         "name": system.get("COORDINATE_SYSTEM_NAME"),
         "reference_frame": system.get("REFERENCE_COORD_SYSTEM_NAME"),
@@ -68,10 +88,11 @@ def get_coordinate_systems(
     Fetch and format information about all VICAR-style coordinate systems
     defined in a PDS3-labeled product.
     """
+    # TODO: messy
     frame_names = [
-        k.replace("_COORDINATE_SYSTEM", "")
+        k.split("_")[0]
         for k in data.metadata.fieldcounts
-        if k.endswith("_COORDINATE_SYSTEM")
+        if re.match(r"\w+_COORD(INATE)?_SYSTEM(_PARMS)?$", k)
     ]
     return {
         name: get_coordinate_system_properties(name, data)
@@ -166,42 +187,78 @@ def sph2cart(
     return x0, y0, z0
 
 
-def quaternion_multiplication(q1, q2):
-    s1, v1 = q1[0], q1[1:]
-    s2, v2 = q2[0], q2[1:]
+def quaternion_multiplication(q1: Quaternion, q2: Quaternion) -> Quaternion:
+    """
+    Implements the conventional quaternion multiplication operation, i.e.,
+    returns q1 ⋅ q2 for q1, q2 ∈ ℍ. See `Quaternion` docstring for format
+    convention.
+    """
+    s1, v1, s2, v2 = q1[0], q1[1:], q2[0], q2[1:]
     scalar = s1 * s2 - np.dot(v1, v2)
-    vector = (s1 * v2 + s2 * v1 + np.cross(v1, v2))
+    vector = s1 * v2 + s2 * v1 + np.cross(v1, v2)
     return np.array([scalar, *vector])
 
 
-def invert_quaternion(quaternion):
-    return np.array([quaternion[0]] + [-1 * q for q in quaternion[1:]])
-
-
-def rotate_unit_vector(alt, az, rotation_quaternion, orientation="clockwise"):
+def invert_quaternion(quat: Quaternion) -> Quaternion:
     """
-    assumptions:
-    1. left-handed coordinate system,
-    2. scalar-first quaternion representation.
-    3. units are degrees.
+    Return the quaternion whose vector part is the additive inverse of `quat`'s
+    vector part and whose scalar part is `quat`'s scalar part. For example,
+    `invert_quaternion([1, 2, 3, 4])` returns `[1, -2, -3, -4]`.
+    """
+    return np.array([quat[0]] + [-1 * e for e in quat[1:]])
+
+
+def rotate_unit_vector(
+    alt: float,
+    az: float,
+    quat: Quaternion,
+    clockwise: bool = True
+) -> np.ndarray:
+    """
+    Apply a rotation expressed as a unit quaternion to a unit vector expressed
+    as spherical coordinates. The returned vector is also expressed in
+    spherical coordinates.
+
+    Assumes units of degrees. Also assumes left-handed coordinate systems by
+    default; pass `clockwise=False` for a right-handed system.
     """
     source_cartesian = np.array(sph2cart(alt, az))
-    if orientation == "clockwise":
+    if clockwise is True:
         source_cartesian *= np.array([-1, -1, 1])
     zero_quaternion = np.array([0, *source_cartesian])
-    inverse_rotation = invert_quaternion(rotation_quaternion)
+    inverse_rotation = invert_quaternion(quat)
     q_times_0_v = quaternion_multiplication(
-        rotation_quaternion, zero_quaternion
+        quat, zero_quaternion
     )
     v_prime = quaternion_multiplication(q_times_0_v, inverse_rotation)
     assert np.isclose(v_prime[0], 0)
     target_cartesian = v_prime[1:]
-    if orientation == "clockwise":
+    if clockwise is True:
         target_cartesian *= np.array([-1, -1, 1])
     return np.array(cart2sph(*target_cartesian))
 
 
-def get_coordinates(data: pdr.Data):
+def get_coordinates(
+    data: pdr.Data
+) -> dict[str, dict[str, dict[Literal["AZIMUTH", "ELEVATION"], float]]]:
+    """
+    Fetch and organize all VICAR-style azimuth/elevation values mentioned in
+    the metadata of a pdr.Data object.
+
+    For example, if a product's label gives INSTRUMENT and SOLAR
+    azimuth/elevation values in both SITE and ROVER frames:
+
+    >>> coordinated_data = pdr.read("coordinated.lbl")
+    >>> get_coordinates(coordinated_data)
+
+    Expected output (numeric values will of course vary depending on product):
+    ```
+    {'ROVER': {'INSTRUMENT': {'AZIMUTH': 351.484, 'ELEVATION': -44.5026},
+    'SOLAR': {'AZIMUTH': 89.4054, 'ELEVATION': 67.2452}},
+    'SITE': {'INSTRUMENT': {'AZIMUTH': 175.589, 'ELEVATION': -35.0211},
+    'SOLAR': {'AZIMUTH': 293.467, 'ELEVATION': 63.6488}}}
+    ```
+    """
     # TODO: maybe expand this
     axes = ("AZIMUTH", "ELEVATION")
     entities = set()
@@ -241,9 +298,9 @@ def transform_angle(source_frame, target_frame, entity, data):
         quaternion = source_info["quaternion"]
     coord = coordinates[source_frame][entity]
     if target_info is not None:
-        orientation = target_info['orientation'].lower()
+        clockwise = "clockwise" in target_info['orientation'].lower()
     else:
-        orientation = source_info['orientation'].lower()
+        clockwise = "clockwise" in source_info['orientation'].lower()
     return rotate_unit_vector(
-        coord['ELEVATION'], coord['AZIMUTH'], quaternion, orientation
+        coord['ELEVATION'], coord['AZIMUTH'], quaternion, clockwise
     )
