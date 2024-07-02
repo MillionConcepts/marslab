@@ -1,25 +1,54 @@
 """
-geometry utilities based on metadata in object labels.
+This module contains functions for performing transformations between
+coordinate systems. It assumes that the coordinate systems of interest are
+defined in relation to one another by offsets and/or rotation quaternions. It
+also contains utilities for preprocessing VICAR-style coordinate system
+definitions from PDS3 labels in order to facilitate easy transformations from,
+e.g., the SOME_INSTRUMENT frame to the SITE frame to the SOME_OTHER_INSTRUMENT
+frame.
 """
 from itertools import product
 from functools import reduce
+from numbers import Real
 from operator import or_
+from typing import Optional, Union, Literal
 
 from dustgoggles.func import is_it
 from dustgoggles.structures import NestingDict, get_from
 import numpy as np
 import pandas as pd
 import pdr
+from numpy.typing import ArrayLike
 
 
-def get_geometry_value(entity_name, frame_name, axis_name, data: pdr.Data):
+UnitOfAngle = Literal["degrees", "radians", "deg", "rad"]
+
+
+# TODO: this may be cruft.
+def get_geometry_value(
+    entity_name: str,
+    frame_name: str,
+    axis_name: str,
+    data: pdr.Data
+) -> Union[float, int, str]:
+    """
+    Fetch the value named `entity_name` for the axis named `axis_name` of the
+    coordinate frame named `frame_name`, as defined in the metadata of `data`.
+    """
     return get_from(
         data.metaget(f"{frame_name}_DERIVED_GEOMETRY_PARMS"),
         (f"{entity_name}_{axis_name}", "value")
     )
 
 
-def get_coordinate_system_properties(frame_name, data):
+def get_coordinate_system_properties(
+    frame_name: str, data: pdr.Data
+) -> Optional[dict[str, Union[np.ndarray, str, float]]]:
+    """
+    Fetch and format information about a VICAR-style coordinate system named
+    `frame_name` from a PDS3-labeled product.
+    If there is no coordinate system named `frame_name`, returns None.
+    """
     system = data.metaget(f"{frame_name}_COORDINATE_SYSTEM")
     if system is None:
         return None
@@ -32,7 +61,13 @@ def get_coordinate_system_properties(frame_name, data):
     }
 
 
-def get_coordinate_systems(data: pdr.Data):
+def get_coordinate_systems(
+    data: pdr.Data
+) -> dict[str, dict[str, Union[np.ndarray, str, float]]]:
+    """
+    Fetch and format information about all VICAR-style coordinate systems
+    defined in a PDS3-labeled product.
+    """
     frame_names = [
         k.replace("_COORDINATE_SYSTEM", "")
         for k in data.metadata.fieldcounts
@@ -44,17 +79,42 @@ def get_coordinate_systems(data: pdr.Data):
     }
 
 
-def cart2sph(x0, y0, z0, unit: str = "degrees"):
+def _check_unit_of_angle(unit: str) -> None:
     """
-    convert cartesian to spherical coordinates. returns degrees by default;
-    pass unit="radians" to return radians. if passed any arraylike objects,
-    returns a DataFrame, otherwise, returns a tuple of values.
+    Integrity check  for angular coordinate representation conversion
+    functions. Freaks out if we don't know anything about a specified unit of
+    angle.
+    """
+    if unit not in {"degrees", "radians", "deg", "rad"}:
+        raise TypeError(
+            f"Unsupported angular unit {unit}. Pass 'degrees'/'deg' or "
+            f"'radians'/'rad' (default is degrees)."
+        )
 
-    caveats:
-    1. this assumes a coordinate convention in which latitude runs from -90
-        to 90 degrees.
-    2. returns longitude in strictly positive coordinates.
+
+def cart2sph(
+    x0: ArrayLike,
+    y0: ArrayLike,
+    z0: ArrayLike,
+    unit: UnitOfAngle = "degrees"
+) -> Union[pd.DataFrame, tuple[Real, Real, Real]]:
     """
+    Classic Cartesian-to-spherical coordinate representation converter.
+    Returns latitude and longitude in degrees by default.
+    Pass `unit="radians"` to return radians. If any of `x0`, `y0`, or `z0` are
+    pandas Series/DataFrames or numpy ndarrays, returns a DataFrame with
+    columns "lat", "lon", and "r". Otherwise, returns a tuple like
+    (lat, lon, r).
+
+    Caveats:
+        1. Assumes that latitude runs from -90 to 90 degrees.
+        2. Returns strictly positive longitude (i.e., uses a 0-360 degree
+           longitude system).
+        3. If more than one of x0, y0, or z0 are of Series/DataFrame/ndarray
+           types, all such arguments must have the same shape. (You may,
+           however, mix scalars in as you please.)
+    """
+    _check_unit_of_angle(unit)
     radius = np.sqrt(x0 ** 2 + y0 ** 2 + z0 ** 2)
     if x0 != 0:
         longitude = np.arctan2(y0, x0)
@@ -62,7 +122,7 @@ def cart2sph(x0, y0, z0, unit: str = "degrees"):
         longitude = np.pi / 2
     longitude = longitude % (np.pi * 2)
     latitude = np.arcsin(z0 / np.sqrt(x0 ** 2 + y0 ** 2 + z0 ** 2))
-    if unit == "degrees":
+    if unit in {"degrees", "deg"}:
         latitude = np.degrees(latitude)
         longitude = np.degrees(longitude)
     if reduce(
@@ -72,18 +132,26 @@ def cart2sph(x0, y0, z0, unit: str = "degrees"):
     return latitude, longitude, radius
 
 
-def sph2cart(lat, lon, radius=1, unit: str = "degrees"):
+def sph2cart(
+    lat: ArrayLike,
+    lon: ArrayLike,
+    radius: ArrayLike = 1,
+    unit: UnitOfAngle = "degrees"
+) -> Union[pd.DataFrame, tuple[Real, Real, Real]]:
     """
-    convert spherical to cartesian coordinates. assumes input is in degrees
-    by default; pass unit="radians" to specify input in radians. if passed any
-    arraylike objects, returns a DataFrame, otherwise, returns a tuple of
-    values.
+    Classic spherical-to-Cartesian coordinate representation converter. By
+    default, assumes `lat` and `lon` are in degrees; pass `unit="radians"` if
+    they are in radians. If any of `lat`, `lon`, or `radius` are pandas
+    Series/DataFrames or numpy ndarrays, returns a DataFrame with columns "x",
+    "y", and "z". Otherwise, returns a tuple like (x, y, z).
 
     caveats:
     1. this assumes a coordinate convention in which latitude runs from -90
         to 90 degrees.
     """
-    if unit == "degrees":
+    # TODO: do there need to be other caveats?
+    _check_unit_of_angle(unit)
+    if unit in {"degrees", "deg"}:
         lat = np.radians(lat)
         lon = np.radians(lon)
     x0 = radius * np.cos(lat) * np.cos(lon)
