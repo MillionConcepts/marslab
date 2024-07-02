@@ -900,7 +900,7 @@ def cut_rectangle(
     `arr` (in other words, standard numpy indexing).
 
     For example:
-    `cut_rectangle(arr, ((-100, 100), (-200, 100), 'inner')` will return a
+    `cut_rectangle(arr, ((-100, 100), (-200, 100)), 'inner')` will return a
     version of `arr` that is masked everywhere except within a rectangle
     that extends 100 pixels left, 100 pixels right, 200 pixels down, and 100
     pixels up from the its center element.
