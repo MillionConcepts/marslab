@@ -583,7 +583,7 @@ def closest_ratio(integer: int, target: float) -> tuple[int, int]:
     Return (x, y) satisfying the condition:
 
     abs((x / y) - `factor`) <= abs((a / b) - `factor`)
-    for all a, b such that a * b == `integer`.
+    ∀ a, b ∈ ℕ in such that a * b == `integer`.
     """
     from sympy import factorint
 
