@@ -580,10 +580,10 @@ def get_all_bands_from_all(instructions: Collection[Mapping]) -> set:
 
 def closest_ratio(integer: int, target: float) -> tuple[int, int]:
     """
-    Return (x, y) satisfying the condition:
+    Return (x, y) satisfying:
 
-    abs((x / y) - `factor`) <= abs((a / b) - `factor`)
-    ∀ a, b ∈ ℕ in such that a * b == `integer`.
+    (a, b ∈ ℕ) ∧ (a * b ==`integer`)
+     → abs((x / y) - `factor`) <= abs((a / b) - `factor`)
     """
     from sympy import factorint
 
