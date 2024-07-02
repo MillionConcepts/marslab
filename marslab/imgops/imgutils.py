@@ -76,7 +76,7 @@ def eightbit(
         return normalize_range(array, (0, 255), stretch)
     output = normalize_range(array, (0, 255), stretch)
     if isinstance(output, np.ma.MaskedArray):
-        output[output.mask] = 0
+        output[output.mask] = np.uint8(0)
     if output.dtype.char not in np.typecodes["AllInteger"]:
         output = np.round(output)
     return output.astype(np.uint8)
@@ -294,7 +294,7 @@ def normalize_range(
             arr = np.clip(arr, *inrange)
     mintype = reduce(
         np.promote_types,
-        filter(None, map(np.min_scalar_type, (*inrange, *bounds)))
+        map(np.min_scalar_type, filter(None, (*inrange, *bounds)))
     )
     if not np.can_cast(mintype, arr.dtype):
         arr = arr.astype(mintype)
@@ -583,7 +583,7 @@ def closest_ratio(integer: int, target: float) -> tuple[int, int]:
     Return (x, y) satisfying:
 
     (a, b ∈ ℕ) ∧ (a * b ==`integer`)
-     → abs((x / y) - `factor`) <= abs((a / b) - `factor`)
+     → abs((x / y) - `target`) <= abs((a / b) - `target`)
     """
     from sympy import factorint
 
@@ -854,7 +854,15 @@ def cut_annulus(
     copy: bool = True
 ) -> np.ma.MaskedArray:
     """
-    Return a version of `arr` with all
+    Return a version of the two-dimensional ndarray `arr` with all values
+    inside or outside of an annulus masked. `bounds[0]` defines the inner
+    bound of the annulus; `bounds[1]` the outer. These definitions are given
+    in units of array-index distance (which is to  say 'pixels' or
+    'picture-plane distance' for most images).
+
+    For instance, if `arr` is a 500 x 500 array:
+
+    `cut_annulus(arr, (100, 200), 'inner')`
     """
     mask_method, _ = _pick_mask_constructors(region)
     distance = radial_index(arr)
