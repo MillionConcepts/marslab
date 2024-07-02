@@ -5,7 +5,7 @@ import gc
 import sys
 from functools import partial, reduce
 from itertools import chain
-from numbers import Number
+from numbers import Number, Real
 from operator import mul
 from typing import (
     Callable,
@@ -14,7 +14,7 @@ from typing import (
     Collection,
     Mapping,
     Union,
-    MutableSequence, Any, Hashable, Optional,
+    MutableSequence, Any, Hashable, Optional, Literal,
 )
 
 from dustgoggles.structures import dig_for_values
@@ -59,65 +59,88 @@ def eightbit(
     """
     Return an 'eight-bit' (single-byte unsigned integer, uint8, u1, etc.)
     version of an array scaled to (0, 255); optionally, stretch (range-clip)
-    it inline. Intended primarily for converting arrays to RGBA-compatible
-    value ranges.
+    it inline. Intended primarily for preparing arrays to be interpreted as
+    images (or image channels) in a conventional colorspace of some kind.
 
     If `array` is already uint8, does not modify it unless stretch is not None,
     in which case it will map its min/max values to 0/255 (optionally
     stretched) as with any other input array.
+
+    WARNING: If `array` is a MaskedArray, this function automatically fills
+      corresponding masked values of the output array with 0s to prevent
+      undesirable typecasting behaviors.
     """
     if array.dtype.char == 'B' and stretch is None:
         return array
     if array.dtype.char == 'B':
         return normalize_range(array, (0, 255), stretch)
-    return np.round(normalize_range(array, (0, 255), stretch)).astype(np.uint8)
+    output = normalize_range(array, (0, 255), stretch)
+    if isinstance(output, np.ma.MaskedArray):
+        output[output.mask] = 0
+    if output.dtype.char not in np.typecodes["AllInteger"]:
+        output = np.round(output)
+    return output.astype(np.uint8)
 
 
-def cropmask(array: np.ndarray, bounds=None, copy=True, **_) -> np.ndarray:
+def cropmask(
+    arr: np.ndarray,
+    bounds: Optional[tuple[int, int, int, int]] = None,
+    copy: bool = True,
+    **_
+) -> np.ndarray:
     """
-    :param array: array to be cropped
-    :param bounds: tuple of (left, right, top, bottom) pixels to crop
+    Return a MaskedArray based on `arr` with all elements that fall within a
+    rectangular 'border' masked (along with any already-masked elements, if
+    `arr` is a MaskedArray).
+    `bounds` is a tuple of  (left, right, top, bottom) pixels to crop, or
+    None; if `bounds` is None; simply return `arr`.
+
+    If `copy` is False and `arr` is a MaskedArray, modify `arr.mask` inplace.
+    The `copy` argument has no effect if `arr` is not a MaskedArray.
     """
     if bounds is None:
-        return array
+        return arr
     assert len(bounds) == 4  # test for bad inputs
     pixels = [side if side != 0 else None for side in bounds]
-    canvas = np.ones(array.shape)
+    canvas = np.ones(arr.shape)
     for value in (1, 3):
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
                 pixels[value] = pixels[value] * -1
     canvas[pixels[2]: pixels[3], pixels[0]: pixels[1]] = 0
-    if isinstance(array, np.ma.MaskedArray):
+    if isinstance(arr, np.ma.MaskedArray):
         if copy is True:
-            array.mask = np.logical_or(canvas, array.mask)
-            return array
+            arr.mask = np.logical_or(canvas, arr.mask)
+            return arr
         return np.ma.masked_array(
-            array.data, np.logical_or(canvas, array.mask)
+            arr.data, np.logical_or(canvas, arr.mask)
         )
-    return np.ma.masked_array(array, canvas)
+    return np.ma.masked_array(arr, canvas)
 
 
-def crop(array: np.ndarray, bounds=None, **_) -> np.ndarray:
+def crop(
+    arr: np.ndarray, bounds: Optional[tuple[int, int, int, int]] = None, **_
+) -> np.ndarray:
     """
-    :param array: array to be cropped
-    :param bounds: tuple of (left, right, top, bottom) pixels to crop
+    return a copy of `arr` cropped to specified rectangular bounds.
+    `bounds` is a tuple of (left, right, top, bottom) pixels to crop, or None;
+    if `bounds` is None, simply return `arr`.
     """
     if bounds is None:
-        return array
+        return arr
     assert len(bounds) == 4  # test for bad inputs
     pixels = [side if side != 0 else None for side in bounds]
     for value in (1, 3):
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
                 pixels[value] = pixels[value] * -1
-    return array[pixels[2] : pixels[3], pixels[0] : pixels[1]]
+    return arr[pixels[2]: pixels[3], pixels[0]: pixels[1]]
 
 
 def crop_all(
     arrays: Collection[np.ndarray], bounds=None, **_
 ) -> Union[Mapping[str, list[np.ndarray]], list[np.ndarray], np.ndarray]:
-    """applies crop() to every array in the passed collection"""
+    """applies crop() to every array in `arrays`."""
     # if you _didn't_ pass it a collection, just overload / dispatch to crop()
     if isinstance(arrays, np.ndarray):
         return crop(arrays, bounds)
@@ -130,19 +153,29 @@ def crop_all(
     return [crop(array, bounds) for array in arrays]
 
 
-def clip_unmasked(array: np.ma.MaskedArray):
-    return np.clip(array.data, array.min(), array.max())
-
-
-def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
+def clip_unmasked(arr: np.ma.MaskedArray) -> np.ndarray:
     """
-    produce a 'split' version of a filter that applies itself to slices across
-    a particular axis -- e.g., take a gaussian blur function, return a function
-    that applies a gaussian blur to R / G / B channels separately and then
-    recomposes them
+    np.clip() does not always respect masks properly. Return an unmasked
+    version of `arr` clipped to the min/max values of its unmasked elements.
+    """
+    return np.clip(arr.data, arr.min(), arr.max())
+
+
+# TODO: this may no longer be necessary for some functions due to upstream
+#  API changes (notably, the referred-to gaussian blur function).
+def split_filter(
+    filter_function: Callable[[np.ndarray, ...], np.ndarray], axis: int = -1
+) -> Callable:
+    """
+    produce a 'split' version of a function -- notionally an image filter --
+    that applies itself to slices across a particular axis. e.g., if passed a
+    gaussian blur function, returns a function that applies a gaussian blur to
+    R / G / B channels separately and then recomposes them.
     """
 
-    def multi(array, *, set_axis: int = axis, **kwargs) -> np.ndarray:
+    def multi(
+        array: np.ndarray, *, set_axis: int = axis, **kwargs: Any
+    ) -> np.ndarray:
         filt = partial(filter_function, **kwargs)
         filtered = tuple(
             map(filt, np.split(array, array.shape[set_axis], set_axis))
@@ -156,8 +189,8 @@ def split_filter(filter_function: Callable, axis: int = -1) -> Callable:
 
 def map_filter(filter_function: Callable) -> Callable:
     """
-    returns a version of a function that automatically maps itself across all
-    elements of a collection
+    returns a version of a function -- notionally an image filter -- that
+    automatically maps itself across all elements of a passed collection.
     """
 
     def mapped_filter(arrays, *args, **kwargs):
@@ -166,7 +199,9 @@ def map_filter(filter_function: Callable) -> Callable:
     return mapped_filter
 
 
-def find_masked_bounds(image, cheat_low, cheat_high):
+def find_masked_bounds(
+    image: np.ma.MaskedArray, cheat_low: float, cheat_high: float
+) -> Union[tuple[Real, Real], tuple[None, None]]:
     """
     relatively memory-efficient way to perform bound calculations for
     normalize_range on a masked array.
@@ -202,7 +237,9 @@ def find_masked_bounds(image, cheat_low, cheat_high):
 
 
 # noinspection PyArgumentList
-def find_unmasked_bounds(image, cheat_low, cheat_high):
+def find_unmasked_bounds(
+    image: np.ndarray, cheat_low: float, cheat_high: float
+) -> tuple[Real, Real]:
     """straightforward way to find unmasked array bounds for normalize_range"""
     if cheat_low != 0:
         minimum = np.percentile(image, cheat_low).astype(image.dtype)
@@ -217,7 +254,7 @@ def find_unmasked_bounds(image, cheat_low, cheat_high):
 
 def normalize_range(
     arr: np.ndarray,
-    bounds: tuple[Number, Number] = (0., 1.),
+    bounds: tuple[Real, Real] = (0., 1.),
     stretch: Union[float, tuple[float, float], None] = None,
     inplace: bool = False,
 ) -> Union[np.ndarray, np.ma.MaskedArray]:
@@ -635,17 +672,16 @@ rv = ravel_valid
 
 def setmask(arr: np.ndarray, value: Any, copy: bool = True) -> np.ndarray:
     """
-    Convenience wrapper/handler for MaskedArray.fill() and
-    MaskedArray.filled() that also doesn't attempt to mess with non-masked
-    arrays.
+    Convenience wrapper/handler for MaskedArray 'filling' behaviors that
+    politely ignores non-masked arrays.
 
     Returns a (non-masked) array like `arr`, but with all masked elements
     replaced with `value`. If `copy`  is True, calls `arr.filled()` (which
-    creates a copy of `arr`); otherwise, calls `arr.fill()` (which modifies
-    `arr.data` inplace).
+    creates a copy of `arr`). Otherwise, modifies `arr.data` inplace and
+    returns it.
 
-    If `arr` is _not_ a MaskedArray, this simply returns `arr` if `copy` is
-    False, and `arr.copy()` if `copy` is True.
+    If `arr` is _not_ a MaskedArray, simply returns `arr` if `copy` is False,
+    and `arr.copy()` if `copy` is True.
 
     Note: Does not attempt to typecast `arr` to match `value` or vice versa.
      Will throw an exception on numpy>=2.0.0 if `value` is incompatible with
@@ -655,7 +691,7 @@ def setmask(arr: np.ndarray, value: Any, copy: bool = True) -> np.ndarray:
         return arr if copy is False else arr.copy()
     if copy is True:
         return arr.filled(value)
-    arr.fill(value)
+    arr.data[arr.mask] = value
     return arr.data
 
 
@@ -698,7 +734,7 @@ def colorfill_maskedarray(
     color: Union[float, tuple[float, float, float]] = 0.45,
     mask_alpha=None,
     unmasked_alpha=None,
-):
+) -> np.ndarray:
     """
     masked_array: 2-D masked array or a 3-D masked array with last axis of
     length 3. should be float normalized to 0-1.
@@ -743,8 +779,8 @@ def maskwhere(
 ) -> list[np.ndarray]:
     """
     Return a list of boolean ndarrays corresponding to `images` such that
-    the i-th element of that list is true where `images[i]` is in constants
-    and false elsewhere.
+    the i-th element of that list is True where `images[i]` is in `constants`
+    and False elsewhere.
 
     Intended primarily as a convenience function for producing special constant
     masks for a group of related images.
@@ -753,7 +789,12 @@ def maskwhere(
     return reduce(np.logical_or, [np.isin(i, constants) for i in images])
 
 
-def pick_mask_constructors(region):
+def _pick_mask_constructors(
+    region: Literal['inner', 'outer']
+) -> tuple[
+    Callable[[np.ndarray, Any, Any], np.ma.MaskedArray],
+    Callable[[np.ndarray, np.ndarray], np.ndarray]
+]:
     if region == "inner":
         return np.ma.masked_outside, np.logical_or
     elif region == "outer":
@@ -761,43 +802,80 @@ def pick_mask_constructors(region):
     raise ValueError(f"region={region}; region must be 'inner' or 'outer'")
 
 
-def centered_indices(array):
-    y, x = np.indices(array.shape)
-    y0, x0 = (array.shape[0] - 1) / 2, (array.shape[1] - 1) / 2
+def centered_indices(arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return a pair of arrays giving offsets from center, in index units, for
+    the 2D array `arr` (or any other array of its shape).
+
+    NOTE: These cannot actually be used as index arrays! They represent
+        'distance' along each axis from center.
+    """
+    if arr.ndim != 2:
+        raise ValueError("This function only takes 2D arrays.")
+    y, x = np.indices(arr.shape)
+    y0, x0 = (arr.shape[0] - 1) / 2, (arr.shape[1] - 1) / 2
     return y - y0, x - x0
 
 
-def radial_index(array):
-    y_ix, x_ix = centered_indices(array)
+def radial_index(arr: np.ndarray) -> np.ndarray:
+    """
+    Return an array giving Euclidean distance from center, in index units, for
+    the 2D array `arr` (or any other array of its shape).
+    """
+    y_ix, x_ix = centered_indices(arr)
     return np.sqrt(y_ix**2 + x_ix**2)
 
 
-def join_cut_mask(array, cut_mask, copy=True):
-    if isinstance(array, np.ma.MaskedArray):
-        if copy is True:
-            array = array.copy()
-        array.mask = np.logical_or(cut_mask, array.mask)
-    else:
-        array = np.ma.MaskedArray(array, mask=cut_mask)
-    return array
+def join_cut_mask(
+    arr: np.ndarray, cut_mask: np.ndarray, copy: bool = True
+) -> np.ma.MaskedArray:
+    """
+    Convenience function that masks `arr` with `cut_mask` if `arr` is not a
+    `MaskedArray`, or adds `cut_mask` to `arr.mask` if `arr` is a MaskedArray.
+
+    If `copy` is False and `arr` is a MaskedArray, this modifies `arr.mask`
+    inplace. `copy` has no effect if `arr` is not a MaskedArray.
+
+    `cut_mask` must be the same shape as `arr`; for best results, it should be
+    boolean.
+    """
+    if not isinstance(arr, np.ma.MaskedArray):
+        return np.ma.MaskedArray(arr, mask=cut_mask)
+    if copy is True:
+        arr = arr.copy()
+    arr.mask = np.logical_or(cut_mask, arr.mask)
+    return arr
 
 
-def cut_annulus(array, bounds, region="inner", copy=True):
-    mask_method, _ = pick_mask_constructors(region)
-    distance = radial_index(array)
-    pass_min, pass_max = bounds
-    pass_min = pass_min if pass_min is not None else distance.min()
-    pass_max = pass_max if pass_max is not None else distance.max()
+def cut_annulus(
+    arr: np.ndarray,
+    bounds: tuple[Optional[Real], Optional[Real]],
+    region: Literal["inner", "outer"] = "inner",
+    copy: bool = True
+) -> np.ma.MaskedArray:
+    """
+    Return a version of `arr` with all
+    """
+    mask_method, _ = _pick_mask_constructors(region)
+    distance = radial_index(arr)
+    pass_min = bounds[0] if bounds[0] is not None else distance.min()
+    pass_max = bounds[1] if bounds[1] is not None else distance.max()
     cut_mask = mask_method(distance, pass_min, pass_max).mask
-    return join_cut_mask(array, cut_mask, copy)
+    return join_cut_mask(arr, cut_mask, copy)
 
 
-def cut_rectangle(array, bounds, region="inner", center=True, copy=True):
-    mask_method, op = pick_mask_constructors(region)
+def cut_rectangle(
+    arr,
+    bounds: tuple[Optional[Real], Optional[Real]],
+    region: Literal["inner", "outer"] = "inner",
+    center: bool = True,
+    copy: bool = True
+):
+    mask_method, op = _pick_mask_constructors(region)
     if center is True:
-        y_dist, x_dist = centered_indices(array)
+        y_dist, x_dist = centered_indices(arr)
     else:
-        y_dist, x_dist = np.indices(array.shape)
+        y_dist, x_dist = np.indices(arr.shape)
     masks = []
     x_bounds, y_bounds = bounds
     for bound, dist in zip((x_bounds, y_bounds), (x_dist, y_dist)):
@@ -806,7 +884,7 @@ def cut_rectangle(array, bounds, region="inner", center=True, copy=True):
         pass_max = pass_max if pass_max is not None else dist.max()
         masks.append(mask_method(dist, pass_min, pass_max).mask)
     cut_mask = op(*masks)
-    return join_cut_mask(array, cut_mask, copy)
+    return join_cut_mask(arr, cut_mask, copy)
 
 
 def zerocut(*args, **kwargs):
