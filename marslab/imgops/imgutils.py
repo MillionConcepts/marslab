@@ -340,6 +340,7 @@ def enhance_color(image: np.ndarray, bounds, stretch):
     return split_filter(normalize_range)(image, bounds=bounds, stretch=stretch)
 
 
+# TODO: probably pointless cruft. verify.
 def clip_finite(image, a_min: int, a_max: int):
     finite = np.ma.masked_invalid(image)
     result = np.ma.clip(finite, a_min, a_max)
@@ -795,6 +796,11 @@ def _pick_mask_constructors(
     Callable[[np.ndarray, Any, Any], np.ma.MaskedArray],
     Callable[[np.ndarray, np.ndarray], np.ndarray]
 ]:
+    """
+    Helper function for cut_annulus() and cut_rectangle(). Selects a relation
+    and a logical operator that facilitate masking everything outside or inside
+    a set of bounds.
+    """
     if region == "inner":
         return np.ma.masked_outside, np.logical_or
     elif region == "outer":
@@ -849,20 +855,23 @@ def join_cut_mask(
 
 def cut_annulus(
     arr: np.ndarray,
-    bounds: tuple[Optional[Real], Optional[Real]],
+    bounds: tuple[Real, Real],
     region: Literal["inner", "outer"] = "inner",
     copy: bool = True
 ) -> np.ma.MaskedArray:
     """
-    Return a version of the two-dimensional ndarray `arr` with all values
+    Return a version of the 2D ndarray `arr` with all values
     inside or outside of an annulus masked. `bounds[0]` defines the inner
     bound of the annulus; `bounds[1]` the outer. These definitions are given
-    in units of array-index distance (which is to  say 'pixels' or
-    'picture-plane distance' for most images).
+    in units of array-index distance (which is to say 'pixels' or
+    'picture-plane distance' for most images). The Euclidean norm is assumed.
 
-    For instance, if `arr` is a 500 x 500 array:
-
-    `cut_annulus(arr, (100, 200), 'inner')`
+    For example:
+    `cut_annulus(arr, (100, 200), 'inner')` will return a version of `arr` that
+    is masked everywhere except within a ring bounded by 100 array-index units
+    from the center of `arr` and 200 array-index units from the center of
+    `arr`. `cut_annulus(arr, (100, 200), 'outer')` will do the same, except
+    that the array it returns will be masked _only_ within that ring.
     """
     mask_method, _ = _pick_mask_constructors(region)
     distance = radial_index(arr)
@@ -874,11 +883,28 @@ def cut_annulus(
 
 def cut_rectangle(
     arr,
-    bounds: tuple[Optional[Real], Optional[Real]],
+    bounds: tuple[tuple[Real, Real], tuple[Real, Real]],
     region: Literal["inner", "outer"] = "inner",
     center: bool = True,
     copy: bool = True
-):
+) -> np.ma.MaskedArray:
+    """
+    Return a version of the 2D ndarray `arr` with all values
+    inside or outside of a rectangle masked. `bounds` must be a tuple of
+    two tuples, each of which contains two numbers defining extrema of the
+    rectangle along the x and y axes respectively. These definitions are given
+    in units of array-index distance (which is to say 'pixels' for most
+    images). If `center` is True (which it is by default), `bounds` defines
+    edges with reference to offsets from the center of `arr`. If `center` is
+    False, `bounds` defines edges with reference to the upperleft element of
+    `arr` (in other words, standard numpy indexing).
+
+    For example:
+    `cut_rectangle(arr, ((-100, 100), (-200, 100), 'inner')` will return a
+    version of `arr` that is masked everywhere except within a rectangle
+    that extends 100 pixels left, 100 pixels right, 200 pixels down, and 100
+    pixels up from the its center element.
+    """
     mask_method, op = _pick_mask_constructors(region)
     if center is True:
         y_dist, x_dist = centered_indices(arr)
@@ -895,5 +921,10 @@ def cut_rectangle(
     return join_cut_mask(arr, cut_mask, copy)
 
 
-def zerocut(*args, **kwargs):
+def zerocut(*args, **kwargs) -> np.ndarray:
+    """
+    Convenience wrapper for `cut_rectangle()` that automatically sets all
+    masked elements to 0. Intended primarily for quick renders and spectral
+    analyses.
+    """
     return zero_mask(cut_rectangle(*args, **kwargs))
