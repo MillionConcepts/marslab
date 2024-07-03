@@ -3,17 +3,19 @@ inline rendering functions for look pipelines. can also be called on their own.
 """
 import io
 from functools import reduce
-from itertools import repeat, chain
-from typing import Union, Optional, Sequence
+from itertools import chain, repeat
+from pathlib import Path
+from typing import Collection, Optional, Sequence, Union, Callable, Mapping
 
+from dustgoggles.structures import separate_by
 import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
-from dustgoggles.structures import separate_by
+from matplotlib.font_manager import FontProperties
 from numpy.typing import ArrayLike
+from PIL import Image
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import (
@@ -25,6 +27,7 @@ from marslab.imgops.imgutils import (
 from marslab.imgops.pltutils import (
     attach_axis, get_mpl_image, set_colorbar_font, strip_axes
 )
+from marslab.spectops import Specvals
 
 
 def decorrelation_stretch(
@@ -128,11 +131,24 @@ def decorrelation_stretch(
 # TODO: I think masking in this is too late and we should be doing it up
 #  front, adding an optional median fill step for cases where we might have
 #  undesirable white pixels everywhere or whatever.
-def render_rgb_composite(channels, *, special_constants=None):
+def render_rgb_composite(
+    channels: Sequence[np.ndarray],
+    *,
+    special_constants: Optional[Union[Collection[float], np.ndarray]] = None
+) -> np.ndarray:
     """
-    render a composited image from three input channels. this is a good basis
-    for producing both "true-color" and "enhanced-color" images from most
-    filter sets.
+    Composite three input arrays / 'channels' into an 'image', All three arrays
+    must have the same shape, and for best results, should be of the same
+    dtype. The returned 'image' has shape (*input_shape, 3).
+
+    Although not limited to this application, this function is intended
+    primarily to merge 2D arrays representing red, green, and blue image
+    channels into an array that can be easily rendered as an RGB image.
+
+    This function is a good basis for producing both "true-color" and
+    "enhanced-color" images from most filter sets, and can also be used for
+    stranger purposes.
+
     TODO: following is no longer true. move this as an interpretation step to
       Look.compile_from_instruction()
     this assumes normalization as a default option because you're presumably
@@ -140,6 +156,7 @@ def render_rgb_composite(channels, *, special_constants=None):
     arbitrary colormap (although aren't they all?).
     """
     assert len(channels) == 3
+    assert len(set(map(lambda arr: arr.shape, channels))) == 1
     if isinstance(channels[0], np.ma.MaskedArray):
         composed = np.ma.dstack(channels)
     else:
@@ -155,11 +172,14 @@ def render_rgb_composite(channels, *, special_constants=None):
 
 
 def spectop_look(
-    images,
-    flat_mask=None,
+    images: Union[Specvals],
+    flat_mask: Optional[np.ndarray] = None,
     *,
-    spectop=None,
-    wavelengths=None,
+    spectop: Callable[
+        [Specvals, Optional[Specvals], Optional[Specvals]],
+        tuple[np.ndarray, np.ndarray]
+    ],
+    wavelengths: Optional[Specvals] = None,
 ):
     look = spectop(images, None, wavelengths)[0]
     if flat_mask is None:
@@ -173,10 +193,12 @@ def spectop_look(
 
 # TODO: cruft, this should be handled by BandSet -- but is it?
 def rgb_from_bayer(
-    image,
-    bayer_pattern,
-    bayer_pixels=("red", ("green_1", "green_2"), "blue"),
-):
+    image: np.ndarray,
+    bayer_pattern: Mapping[str, Sequence[int]],
+    bayer_pixels: Sequence[
+        Union[str, tuple[str]]
+    ] = ("red", ("green_1", "green_2"), "blue"),
+) -> np.ndarray:
     """
     assemble m x n x 3 array from specified bayer pixels of passed
     single m x n array or 3 m x n arrays
@@ -212,18 +234,21 @@ def rgb_from_bayer(
 
 
 def make_thumbnail(
-    image_array,
-    thumbnail_size=(256, 256),
-    file_or_path_or_buffer=None,
-    filetype=None,
-):
+    image_array: np.ndarray,
+    thumbnail_size: tuple[int, int] = (256, 256),
+    file_or_path_or_buffer: Optional[Union[str, Path, io.BytesIO]] = None,
+    filetype: Optional[str] = None,
+) -> Union[str, Path, io.BytesIO]:
     """
     makes thumbnails from arrays or matplotlib images or PIL.Images
     """
+    if (
+        filetype is None
+        and not isinstance(file_or_path_or_buffer, (str, Path))
+    ):
+        filetype = "jpeg"
     if file_or_path_or_buffer is None:
         file_or_path_or_buffer = io.BytesIO()
-    if filetype is None:
-        filetype = "jpeg"
     if isinstance(image_array, mpl.figure.Figure):
         thumbnail_array = get_mpl_image(image_array).convert("RGB")
     elif isinstance(image_array, np.ndarray):
@@ -241,14 +266,18 @@ def make_thumbnail(
 def colormapped_plot(
     array: np.ndarray,
     cmap: Union[str, plt.Colormap, None] = None,
-    render_colorbar=False,
-    no_ticks=True,
-    colorbar_fp=None,
-    special_constants=None,
-    mask_fill_color=0.45,
-    drop_mask=True,
-    alpha=None,
-    layers=None,
+    render_colorbar: bool = False,
+    no_ticks: bool = True,
+    colorbar_fp: Optional[FontProperties] = None,
+    special_constants: Optional[Sequence[Union[int, float]]] = None,
+    mask_fill_color: Union[float, tuple[float, float, float]] = 0.45,
+    drop_mask: bool = True,
+    alpha: Optional[float] = None,
+    layers: Optional[
+        Union[
+            np.ndarray, dict[str, Union[int, np.ndarray]]
+        ]
+    ] = None,
     n_ticks=3
 ):
     """

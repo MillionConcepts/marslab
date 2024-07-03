@@ -11,7 +11,7 @@ Caution: everything must be passed in 'last index fastest' / 'row-primary'
 orientation. this means that a lot of pandas dataframes will need to be
 transposed to get meaningful results.
 """
-from typing import Sequence, Union, Optional, Collection
+from typing import Optional, Sequence, Union
 
 import numpy as np
 from numpy.linalg import norm
@@ -23,11 +23,9 @@ import pandas as pd
 #  usefully add to this module.
 
 
-Specvals = Union[pd.DataFrame, pd.Series, list[float], np.ndarray]
+Specvals = Union[pd.DataFrame, pd.Series, list[list[float]], np.ndarray]
 """
 Valid types for "spectral data" arguments to many functions in this module.
-Note that if an argument annotated as Specvals is a DataFrame, it should only
-have one column.
 """
 
 
