@@ -20,9 +20,7 @@ def boring_reals(min_mag: int, max_mag: int):
     ).filter(lambda x: x == 0 or min_mag <= x <= max_mag)
 
 
-quaternions = st.lists(
-    boring_reals(-4, 8), min_size=4, max_size=4
-)
+quaternions = st.lists(boring_reals(-4, 8), min_size=4, max_size=4)
 finite_floats = st.floats(allow_nan=False, allow_infinity=False)
 finite_numbers = st.one_of(st.integers(), finite_floats)
 positive_finite_floats = st.floats(
