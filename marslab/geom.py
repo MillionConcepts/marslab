@@ -193,6 +193,7 @@ def quaternion_multiplication(q1: Quaternion, q2: Quaternion) -> Quaternion:
     returns q1 ⋅ q2 for q1, q2 ∈ ℍ. See `Quaternion` docstring for format
     convention.
     """
+    q1, q2 = map(np.asarray, (q1, q2))
     s1, v1, s2, v2 = q1[0], q1[1:], q2[0], q2[1:]
     scalar = s1 * s2 - np.dot(v1, v2)
     vector = s1 * v2 + s2 * v1 + np.cross(v1, v2)
@@ -216,11 +217,10 @@ def rotate_unit_vector(
 ) -> np.ndarray:
     """
     Apply a rotation expressed as a unit quaternion to a unit vector expressed
-    as spherical coordinates. The returned vector is also expressed in
-    spherical coordinates.
+    as spherical coordinates.
 
     Assumes units of degrees. Also assumes left-handed coordinate systems by
-    default; pass `clockwise=False` for a right-handed system.
+    default; pass `clockwise=False` to specify right-handed system.
     """
     source_cartesian = np.array(sph2cart(alt, az))
     if clockwise is True:
@@ -285,7 +285,9 @@ def get_coordinates(
     return coordinates.todict()
 
 
-def transform_angle(source_frame, target_frame, entity, data):
+def transform_angle(
+    source_frame, target_frame, entity, data
+):
     coordinates = get_coordinates(data)
     systems = get_coordinate_systems(data)
     source_info = systems.get(source_frame)
