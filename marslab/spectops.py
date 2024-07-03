@@ -11,7 +11,7 @@ Caution: everything must be passed in 'last index fastest' / 'row-primary'
 orientation. this means that a lot of pandas dataframes will need to be
 transposed to get meaningful results.
 """
-from typing import Sequence, Union, Optional
+from typing import Sequence, Union, Optional, Collection
 
 import numpy as np
 from numpy.linalg import norm
@@ -19,12 +19,26 @@ import pandas as pd
 
 
 # TODO: make all kwarg signatures flatly identical
+# TODO: there are a variety of other fairly simple operations we could
+#  usefully add to this module.
 
 
-def preprocess_input(reflectance, errors=None, wavelengths=None):
+Specvals = Union[pd.DataFrame, pd.Series, list[float], np.ndarray]
+"""
+Valid types for "spectral data" arguments to many functions in this module.
+Note that if an argument annotated as Specvals is a DataFrame, it should only
+have one column.
+"""
+
+
+def preprocess_input(
+    reflectance: Specvals,
+    errors: Optional[Specvals] = None,
+    wavelengths: Specvals = None
+) -> list[np.ndarray]:
     """
-    did someone pass this function something silly? raise an issue.
-    then cast everything to ndarray.
+    did someone pass this function something silly? If so, raise an exception.
+    Then return all arguments cast to ndarray.
     """
     if errors is not None:
         if isinstance(reflectance, (np.ndarray, pd.DataFrame, pd.Series)):
@@ -39,7 +53,10 @@ def preprocess_input(reflectance, errors=None, wavelengths=None):
     return [np.asarray(thing) for thing in (reflectance, errors, wavelengths)]
 
 
-def reindex_or_mask(*object_pairs):
+# TODO: this smells bad.
+def reindex_or_mask(
+    *object_pairs: Sequence[tuple[Optional[Specvals], Optional[Specvals]]]
+) -> list[Specvals]:
     returning = []
     for pair in object_pairs:
         thing = pair[0]
@@ -54,12 +71,13 @@ def reindex_or_mask(*object_pairs):
     return returning
 
 
-def addition_in_quadrature(errors):
+# TODO: we remain uncertain about the validity / relevance of error
+#  calculations for some operations.
+def addition_in_quadrature(errors: Specvals) -> Optional[float]:
     """
-    take what numpy thinks is the norm.
-    in most cases this should be equivalent to
-    summing in quadrature. this is just what
-    we're doing for now, I guess.
+    take what numpy thinks is the norm. In most cases this should be equivalent
+    to summing in quadrature. If `errors` contains `None` (generally meaning
+    it is an array([None]) produced by `preprocess_input()`), just return None.
     """
     if None in errors:
         return None
@@ -67,10 +85,10 @@ def addition_in_quadrature(errors):
 
 
 def ratio(
-    reflectance: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray],
+    reflectance: Specvals,
     errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
     _wavelengths: Optional[Sequence] = None,
-):
+) -> list[Specvals]:
     """
     just a ratio function. notionally, ratio of reflectance
     values between two filters. looks at the first two 'rows'

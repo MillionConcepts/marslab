@@ -1,6 +1,9 @@
 """
 Utilities for watching worker pools. Can be used for progress updates, logging,
 etc.
+
+TODO, maybe: this is more special-purpose than originally intended and quite
+ possibly shouldn't be in marslab at all.
 """
 import os
 from collections.abc import Callable, Mapping
