@@ -19,6 +19,7 @@ import pandas as pd
 
 
 # TODO: make all kwarg signatures flatly identical
+#  -- NOTE: is that obsolete?
 # TODO: there are a variety of other fairly simple operations we could
 #  usefully add to this module.
 
@@ -32,8 +33,8 @@ Valid types for "spectral data" arguments to many functions in this module.
 def preprocess_input(
     reflectance: Specvals,
     errors: Optional[Specvals] = None,
-    wavelengths: Specvals = None
-) -> list[np.ndarray]:
+    wavelengths: Optional[Specvals] = None
+) -> tuple[Specvals, Specvals, Specvals]:
     """
     did someone pass this function something silly? If so, raise an exception.
     Then return all arguments cast to ndarray.
@@ -48,12 +49,17 @@ def preprocess_input(
             assert reflectance.shape[0] == len(wavelengths)
         else:
             assert len(reflectance) == len(wavelengths)
-    return [np.asarray(thing) for thing in (reflectance, errors, wavelengths)]
+    # TODO: these should really be None, not array([None]) when not present.
+    #  need to change callers to match that signature.
+    # noinspection PyTypeChecker
+    return tuple(
+        [np.asarray(thing) for thing in (reflectance, errors, wavelengths)]
+    )
 
 
 # TODO: this smells bad.
 def reindex_or_mask(
-    *object_pairs: Sequence[tuple[Optional[Specvals], Optional[Specvals]]]
+    *object_pairs: tuple[Optional[Specvals], Optional[Specvals]]
 ) -> list[Specvals]:
     returning = []
     for pair in object_pairs:
@@ -71,7 +77,7 @@ def reindex_or_mask(
 
 # TODO: we remain uncertain about the validity / relevance of error
 #  calculations for some operations.
-def addition_in_quadrature(errors: Specvals) -> Optional[float]:
+def addition_in_quadrature(errors: Specvals) -> Optional[Specvals]:
     """
     take what numpy thinks is the norm. In most cases this should be equivalent
     to summing in quadrature. If `errors` contains `None` (generally meaning
@@ -84,8 +90,8 @@ def addition_in_quadrature(errors: Specvals) -> Optional[float]:
 
 def ratio(
     reflectance: Specvals,
-    errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
-    _wavelengths: Optional[Sequence] = None,
+    errors: Optional[Specvals] = None,
+    _wavelengths: Optional[Specvals] = None,
 ) -> list[Specvals]:
     """
     just a ratio function. notionally, ratio of reflectance
@@ -106,10 +112,10 @@ def ratio(
 
 
 def band_avg(
-    reflectance: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray],
-    errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
-    _wavelengths: Optional[Sequence] = None,
-):
+    reflectance: Specvals,
+    errors: Optional[Specvals] = None,
+    _wavelengths: Optional[Specvals] = None,
+) -> list[Specvals]:
     """
     just an averaging function. notionally, average of all filters within a
     contiguous block of wavelengths. your responsibility to make sure
@@ -127,10 +133,10 @@ def band_avg(
 
 
 def slope(
-    reflectance: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray],
-    errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
-    wavelengths: Union[Sequence] = None,
-):
+    reflectance: Specvals,
+    errors: Optional[Specvals] = None,
+    wavelengths: Optional[Specvals] = None
+) -> list[Specvals]:
     """
     just a slope function. notionally, slope in reflectance-
     wavelength space between two filters. only looks at the first
@@ -153,10 +159,10 @@ def slope(
 
 
 def band_depth(
-    reflectance: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray],
-    errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
-    wavelengths: Union[Sequence] = None,
-):
+    reflectance: Specvals,
+    errors: Optional[Specvals] = None,
+    wavelengths: Optional[Specvals] = None,
+) -> list[Specvals]:
     assert (
         wavelengths is not None
     ), "wavelengths must be passed to band_depth()"
@@ -209,9 +215,9 @@ def band_depth(
 
 
 def band_min(
-    reflectance: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray],
-    _errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
-    wavelengths: Optional[Sequence] = None,
+    reflectance: Specvals,
+    _errors: Optional[Specvals] = None,
+    wavelengths: Optional[Specvals] = None,
 ):
     assert wavelengths is not None, "wavelengths must be passed to band_min()"
     assert None not in wavelengths, "wavelengths must be passed to band_min()"
@@ -228,10 +234,10 @@ def band_min(
 
 
 def band_max(
-    reflectance: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray],
-    _errors: Union[pd.DataFrame, pd.Series, Sequence, np.ndarray, None] = None,
-    wavelengths: Optional[Sequence] = None,
-):
+    reflectance: Specvals,
+    _errors: Optional[Specvals] = None,
+    wavelengths: Optional[Specvals] = None,
+) -> list[Specvals]:
     assert wavelengths is not None, "wavelengths must be passed to band_max()"
     assert None not in wavelengths, "wavelengths must be passed to band_max()"
     reflectance_array, _error_array, wavelength_array = preprocess_input(
@@ -254,3 +260,7 @@ SPECTOP_NAMES = (
     "ratio",
     "slope",
 )
+"""
+Names of all functions in this module that follow the Spectop signature 
+convention.
+"""
