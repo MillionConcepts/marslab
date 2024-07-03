@@ -7,34 +7,39 @@ definitions from PDS3 labels in order to facilitate easy transformations from,
 e.g., the SOME_INSTRUMENT frame to the SITE frame to the SOME_OTHER_INSTRUMENT
 frame.
 """
-import re
 from itertools import product
 from functools import reduce
 from numbers import Real
 from operator import or_
+import re
 from typing import Optional, Union, Literal, Sequence
 
 from dustgoggles.func import is_it
 from dustgoggles.structures import NestingDict, get_from
 import numpy as np
+from numpy.typing import ArrayLike
 import pandas as pd
 import pdr
-from numpy.typing import ArrayLike
 
 Quaternion = Sequence[Real]
 """
 Simple alias to clarify type hints. Denotes a quaternion expressed in the form
-used by functions in this module. (Note that most functions in this module that
-return a Quaternion express it as a list.)
+used by functions in this module. (Note that all functions in this module that
+return a Quaternion return it as an ndarray, but will accept both ndarrays 
+and other types of sequences as arguments.)
 
-Although not formally expressed by this hint, a Quaternion object should always
-be a size-4 1D sequence whose elements are of a types interpretable as real
-numbers, where the first element represents the scalar part and the remaining
-elements represent the basis part; i.e., 
+An argument annotated as Quaternion should always be a size-4 1D sequence of 
+real numbers in which the first element represents the quaternion's scalar part
+and the remaining elements represent its basis/vector part. 
+
+In other words:
+
 `quat: Quaternion = np.array([a, b, c, d])` represents the quaternion (a, v),
-where a is a real number and [b, c, d] is an element of ℝ3 (the real coordinate
-space of dimension 3); or, expressed differently, a + b * i + c * j + d * k, 
-where (i, j, k) are the basis elements of a real vector space.
+where a is a real number and v is the element [b, c, d] of ℝ3 (the real 
+coordinate space of dimension 3). 
+
+Equivalently, `quat` represents a + b * i + c * j + d * k, where (i, j, k) are 
+the basis elements of a real vector space of dimension 3.
 """
 
 UnitOfAngle = Literal["degrees", "radians", "deg", "rad"]
@@ -57,6 +62,7 @@ def get_geometry_value(
     )
 
 
+# TODO: these functions feel messy and redundant.
 def get_coordinate_system_properties(
     frame_name: str, data: pdr.Data
 ) -> Optional[dict[str, Union[np.ndarray, str, float]]]:
@@ -127,7 +133,7 @@ def cart2sph(
     columns "lat", "lon", and "r". Otherwise, returns a tuple like
     (lat, lon, r).
 
-    Caveats:
+    Notes:
         1. Assumes that latitude runs from -90 to 90 degrees.
         2. Returns strictly positive longitude (i.e., uses a 0-360 degree
            longitude system).
@@ -187,6 +193,7 @@ def sph2cart(
     return x0, y0, z0
 
 
+# TODO, maybe: this isn't a very good name
 def quaternion_multiplication(q1: Quaternion, q2: Quaternion) -> Quaternion:
     """
     Implements the conventional quaternion multiplication operation, i.e.,
@@ -235,6 +242,9 @@ def rotate_unit_vector(
     target_cartesian = v_prime[1:]
     if clockwise is True:
         target_cartesian *= np.array([-1, -1, 1])
+    # TODO: it's pointless to return the third (radius) element, because
+    #  the result will always be a unit vector. Will probably need to modify 
+    #  downstream to make this change.
     return np.array(cart2sph(*target_cartesian))
 
 
@@ -267,27 +277,38 @@ def get_coordinates(
             k.replace(f"_{axis}", "")
             for k in data.metadata.fieldcounts
             if k.endswith(f"_{axis}")
-        })
+        }) 
+    sysnames = get_coordinate_systems(data).keys()
     coordinates = NestingDict()
-    parms = {
-        k for k in data.metadata.fieldcounts
-        if k.endswith("_DERIVED_GEOMETRY_PARMS")
-    }
-    for system, axis, entity in product(parms, axes, entities):
-        block = data.metaget(system)
+    for system, axis, entity in product(sysnames, axes, entities):
+        block = data.metaget(f"{system}_DERIVED_GEOMETRY_PARMS")
         if block is None:
             continue
         record = block.get(f"{entity}_{axis}")
         if record is not None:
-            coordinates[
-                system.replace("_DERIVED_GEOMETRY_PARMS", "")
-            ][entity][axis] = record['value']
+            coordinates[system][entity][axis] = record['value']
     return coordinates.todict()
 
 
 def transform_angle(
-    source_frame, target_frame, entity, data
-):
+    source_frame: str, target_frame: str, entity: str, data: pdr.Data
+) -> np.ndarray:
+    """
+    Transform an angle described in VICAR-style notation in a PDS3 label from
+    one coordinate system to another. The label must also provide a quaternion
+    defining the relative orientations of those coordinate systems.
+
+    NOTE: "Angle" here is slightly misleading; it really refers to a unit
+      direction vector expressed as altitude/azimuth coordinates.
+
+    For example, assuming that "coordinated.lbl" defines both SOLAR_AZIMUTH
+    and SOLAR_ELEVATION in SITE frame, and also gives a quaternion that
+    rotates coordinates in SITE to coordinates in HEAD, this will return solar
+    altitude and azimuth in HEAD:
+
+    >>> coordinated_data = pdr.read("coordinated.lbl")
+    >>> transform_angle("SITE", "HEAD", "SOLAR", coordinated_data)
+    """
     coordinates = get_coordinates(data)
     systems = get_coordinate_systems(data)
     source_info = systems.get(source_frame)
