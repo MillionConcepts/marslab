@@ -2,7 +2,6 @@
 inline rendering functions for look pipelines. can also be called on their own.
 """
 import io
-from collections import defaultdict
 from functools import reduce
 from itertools import repeat, chain
 from typing import Union, Optional, Sequence
@@ -17,13 +16,14 @@ from dustgoggles.structures import separate_by
 from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import normalize_range, eightbit, enhance_color, \
-    clip_unmasked, colorfill_maskedarray
+from marslab.imgops.imgutils import (
+    colorfill_maskedarray,
+    eightbit,
+    enhance_color,
+    normalize_range
+)
 from marslab.imgops.pltutils import (
-    set_colorbar_font,
-    get_mpl_image,
-    attach_axis,
-    strip_axes,
+    attach_axis, get_mpl_image, set_colorbar_font, strip_axes
 )
 
 
@@ -240,7 +240,7 @@ def make_thumbnail(
 #  becoming hacky -- maybe solve it more consistently with masks?:
 def colormapped_plot(
     array: np.ndarray,
-    cmap=None,
+    cmap: Union[str, plt.Colormap, None] = None,
     render_colorbar=False,
     no_ticks=True,
     colorbar_fp=None,
@@ -287,11 +287,14 @@ def colormapped_plot(
         if drop_mask is True:
             array = array.data
     if isinstance(cmap, str):
-        cmap = cm.get_cmap(cmap)
-    if cmap is None:
-        cmap = cm.get_cmap("Greys_r")
+        cmap = plt.get_cmap(cmap)
+    elif cmap is None:
+        cmap = plt.get_cmap("Greys_r")
+    elif not isinstance(cmap, plt.Colormap):
+        raise TypeError(f"`cmap` must be NoneType, str, or Colormap")
     mapped = cmap(norm(array))
     if isinstance(array, np.ma.MaskedArray) and (drop_mask is False):
+        # noinspection PyTupleItemAssignment,PyUnresolvedReferences
         mapped[array.mask] = mask_fill_color
     del array
     if alpha is not None:
@@ -386,7 +389,7 @@ def flatten_into_figure(layers, **imshow_kwargs):
     images = []
     for image in list(map(lambda d: d.get("image"), dicts)) + arrays:
         if len(image.shape) != 3:
-            image = cm.get_cmap("Greys_r")(image)
+            image = plt.get_cmap("Greys_r")(image)
         images.append(image)
     fig, ax = plt.subplots()
     ax.imshow(reduce(merge_layers, images), **imshow_kwargs)
