@@ -63,7 +63,9 @@ class TestSpectopsBandAvg:
         )
 
     def test_band_avg_2(self):
-        assert spectops.band_avg([[2, 2], [3, 3]], errors=[2, 2])[0][0] == 2.5
+        assert spectops.band_avg(
+            [[2, 2], [3, 3]], errors=[[2, 2], [1, 1]]
+        )[0][0] == 2.5
 
 
 class TestSpectopsSlope:
