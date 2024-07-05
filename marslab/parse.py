@@ -225,7 +225,7 @@ def secondary_timestamp(fn: str) -> int:
     """Extract SCLK (spacecraft clock epoch time) value from a filename"""
     return int(fn[9:19])
     # Note that there is a special calculation to dial this in precisely
-    #  for sequences of ZCAM and SHERLOCK images which will
+    #  for sequences of ZCAM and SHERLOC images which will
     #  all have the same SCLK as the first in the sequence
 
 
@@ -627,5 +627,6 @@ def parse(fn):
 
 class Parse:
     def __call__(self, fn):
-        # TODO: A decision tree between missions. Right now, everything is M2020.
+        # TODO: A decision tree between missions. Right now, everything is
+        #  M2020.
         return parse(fn)
