@@ -264,7 +264,7 @@ def make_thumbnail(
 #  becoming hacky -- maybe solve it more consistently with masks?:
 def colormapped_plot(
     array: np.ndarray,
-    cmap: Union[str, plt.Colormap, None] = None,
+    cmap: Union[str, mpl.colors.Colormap, None] = None,
     render_colorbar: bool = False,
     no_ticks: bool = True,
     colorbar_fp: Optional[FontProperties] = None,

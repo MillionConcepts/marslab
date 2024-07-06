@@ -7,7 +7,7 @@ import logging
 import os
 from collections.abc import Mapping, Callable, Collection, Sequence
 from pathlib import Path
-from typing import Optional, Union, MutableMapping, Any
+from typing import Optional, Union, MutableMapping, Any, Hashable
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
@@ -218,7 +218,7 @@ class BandSet:
             row_column=self.bayer_info["row_column"],
         )
 
-    def bulk_debayer(self, bands: Collection[str]):
+    def bulk_debayer(self, bands: Collection[Hashable]):
         """
         debayer all bands according to spec in self.metadata and
         self.bayer_info, asynchronously / multithreaded if

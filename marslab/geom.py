@@ -277,16 +277,18 @@ def get_coordinates(
             k.replace(f"_{axis}", "")
             for k in data.metadata.fieldcounts
             if k.endswith(f"_{axis}")
-        }) 
-    sysnames = get_coordinate_systems(data).keys()
+        })
     coordinates = NestingDict()
-    for system, axis, entity in product(sysnames, axes, entities):
-        block = data.metaget(f"{system}_DERIVED_GEOMETRY_PARMS")
+    syskeys = filter(
+        lambda k: k.endswith("_GEOMETRY_PARMS"), data.metadata.fieldcounts
+    )
+    for key, axis, entity in product(syskeys, axes, entities):
+        block = data.metaget(key)
         if block is None:
             continue
         record = block.get(f"{entity}_{axis}")
         if record is not None:
-            coordinates[system][entity][axis] = record['value']
+            coordinates[key.split("_")[0]][entity][axis] = record['value']
     return coordinates.todict()
 
 
