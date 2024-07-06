@@ -1,25 +1,131 @@
 """
-utilities for composing lightweight imaging pipelines
+This module contains utilities for composing lightweight image processing
+pipelines intended principally for generating "quicklook"-type browse images
+from multispectral data.
+
+Its centerpiece is the class `Look`. `Look` objects iteratively apply a
+sequence of functions to one or more input arrays. This module also implements
+a simple DSL intended to allow users to modify the quicklook behavior of an
+application by editing external configuration files.
 """
 from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from inspect import signature
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Collection, Any
+from typing import (
+    Any, Collection, Literal, Optional, TYPE_CHECKING, TypedDict, Union, Hashable
+)
 
 from dustgoggles.composition import Composition
 from dustgoggles.func import argstop
 
 import marslab.spectops
-from marslab.imgops.imgutils import map_filter, crop_all
+from marslab.imgops.imgutils import crop_all, map_filter
 
 if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+STEP_NAMES = (
+    "crop",
+    "prefilter",
+    "mask",
+    "look",
+    "limiter",
+    "postfilter",
+    "plotter",
+    "bang",
+)
+"""
+Valid steps of instructions in the DSL. Look treats each of these differently
+when constructing itself with Look.compile_from_instruction(). Note that the
+order of these names is syntactic; do not rearrange the elements of STEP_NAMES.
+"""
+# noinspection PyTypeHints
+LookName = Literal[
+    Literal[marslab.spectops.SPECTOP_NAMES],
+    Literal[
+        "enhanced color", "true color", "dcs", "composite", "nested_composite"
+    ]
+]
+"""
+Recognized names of operations for the 'look' step. (If none are appropriate, 
+a DSL instruction can instead explicitly specify a Python function.)
+"""
 
+
+class MaskFill(TypedDict):
+    """
+    Format of the optional 'colorfill' value of a sub-instruction in a 'mask'
+    step.
+    """
+    # what color should we fill the masked regions with?
+    # expressed either as a single 0-255 integer (for a grayscale fill))
+    # or a tuple of 3 0-255 integers defining the fill's color as RGB.
+    color: Union[int, tuple[int, int, int]]
+    # alpha / opacity for the color fill layer, expressed as a number between
+    # 0 and 1. 0 specifies a fully transparent fill (which is pointless!);
+    # 1 specifies a fully opaque fill.
+    mask_alpha: float
+
+
+class MaskInstruction(TypedDict):
+    """
+    'mask' steps defined in the DSL cause the generated Look to construct one
+    or more masks in sequence. This is the format of an sub-instruction in
+    a 'mask' step.
+    """
+    # the primary masking function
+    function: Callable
+    params: Optional[Mapping[str, Any]]
+    # specifies a color fill for the mask in downstream
+    colorfill: Optional[MaskFill]
+
+
+class StepDef(TypedDict):
+    """Format of most steps in a Look DSL instruction."""
+    # explicitly-given Python function
+    function: Callable
+    # kwargs to pass to `function``
+    params: Optional[Mapping[str, Any]]
+
+
+class PrefilterDef(StepDef):
+    """Format of prefilter step."""
+    # if True, assumes the first argument is a tuple of arrays, and applies the
+    # prefilter function separately to each.
+    map: Optional[bool]
+
+
+class LookInstruction(TypedDict):
+    """
+    Look DSL instructions are Python Mappings that follow this structure.
+    """
+    # defines a crop on the input image in pixels: (left, right, bottom, top)
+    crop: Optional[tuple[int, int, int, int]]
+    # a first-pass preprocessing step
+    prefilter: Optional[StepDef]
+    # an additional preprocessing step
+    limiter: Optional[StepDef]
+    # the primary look operation
+    look: Union[LookName, Callable]
+    # if this Look is passed to BandSet.make_look_set(), this specifies which
+    # of the BandSet's bands it should send to the Look. Does nothing in other
+    # cases.
+    bands: Optional[Sequence[Hashable]]
+    # TODO: it's a silly hack to have a required 'instructions' key;
+    #  'mask' should just be a sequence of MaskInstructions.
+    mask: Optional[Mapping[Literal["instructions"], Sequence[MaskInstruction]]]
+    limiter: Optional[StepDef]
+
+
+# TODO, maybe: we need complicated Protocol stuff to precisely type-hint this
 def look_to_function(look: str) -> Callable:
+    """
+    Implements a mapping between plain-language names of core look operations
+    and Python functions.
+    """
     from marslab.imgops import render
     
     if look in marslab.spectops.SPECTOP_NAMES:
@@ -32,21 +138,24 @@ def look_to_function(look: str) -> Callable:
         return render.decorrelation_stretch
     elif look == "nested_composite":
         return render.render_nested_rgb_composite
-    else:
-        raise ValueError("unknown look operation " + look)
+    raise ValueError("unknown look operation " + look)
 
 
 def interpret_look_step(instruction):
     """
-    heart of look pipeline: the look function (spectrum op, dcs, etc.)
-    note this step is _mandatory_.
+    Heart of look pipeline: the look function (spectrum op, dcs, etc.), by
+    name or as an explicitly-defined Python function. This step is _mandatory_.
     """
     try:
         step = instruction["look"]
-        if isinstance(step, str):
-            step = look_to_function(step)
     except KeyError:
         raise ValueError("The instruction must include at least a look type.")
+    if isinstance(step, str):
+        step = look_to_function(step)
+    elif callable(step) is False:
+        raise TypeError(
+            "An instruction's 'look' must be a Python function or a string."
+        )
     return step, instruction.get("params", {})
 
 
@@ -151,19 +260,9 @@ class Look(Composition, ABC):
     ):
         """compile a look instruction into a rendering pipeline"""
         # only look is required. these are _possible_ steps in the pipeline.
-        step_names = (
-            "crop",
-            "prefilter",
-            "mask",
-            "look",
-            "limiter",
-            "postfilter",
-            "plotter",
-            "bang",
-        )
         steps = {}
         inserts = {}
-        for step_name in step_names:
+        for step_name in STEP_NAMES:
             step, kwargs = interpret_instruction_step(instruction, step_name)
             if step is not None:
                 steps[step_name] = step
@@ -178,7 +277,7 @@ class Look(Composition, ABC):
         )
         if "mask" in steps.keys():
             # add 'splitter'
-            # TODO -- maybe implement this at Composition level
+            # TODO, maybe: implement this at Composition level
             look.steps['look'] = argstop(look.steps['look'], 2)
             look.add_send('mask', lambda s: s[2], look._get_plotter_layers())
         return look

@@ -668,7 +668,7 @@ def ravel_valid(arr: np.ndarray) -> np.ndarray:
 
 
 rv = ravel_valid
-"""alias for `ravel_valid()`."""
+"""alias for `ravel_valid`."""
 
 
 def setmask(arr: np.ndarray, value: Any, copy: bool = True) -> np.ndarray:
@@ -808,6 +808,21 @@ def _pick_mask_constructors(
     raise ValueError(f"region={region}; region must be 'inner' or 'outer'")
 
 
+def _make_cut_mask(
+    distance: np.ndarray,
+    bounds: tuple[Real, Real],
+    region: Literal["inner", "outer"]
+) -> np.ndarray:
+    """
+    Generate a mask based on whether elements of `distance` fall within
+    specified bounds.
+    """
+    mask_method, _ = _pick_mask_constructors(region)
+    pass_min = bounds[0] if bounds[0] is not None else distance.min()
+    pass_max = bounds[1] if bounds[1] is not None else distance.max()
+    return mask_method(distance, pass_min, pass_max).mask
+
+
 def centered_indices(arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Return a pair of arrays giving offsets from center, in index units, for
@@ -873,16 +888,12 @@ def cut_annulus(
     `arr`. `cut_annulus(arr, (100, 200), 'outer')` will do the same, except
     that the array it returns will be masked _only_ within that ring.
     """
-    mask_method, _ = _pick_mask_constructors(region)
-    distance = radial_index(arr)
-    pass_min = bounds[0] if bounds[0] is not None else distance.min()
-    pass_max = bounds[1] if bounds[1] is not None else distance.max()
-    cut_mask = mask_method(distance, pass_min, pass_max).mask
-    return join_cut_mask(arr, cut_mask, copy)
+    dist = radial_index(arr)
+    return join_cut_mask(arr, _make_cut_mask(dist, bounds, region), copy)
 
 
 def cut_rectangle(
-    arr,
+    arr: np.ndarray,
     bounds: tuple[tuple[Real, Real], tuple[Real, Real]],
     region: Literal["inner", "outer"] = "inner",
     center: bool = True,
@@ -905,26 +916,25 @@ def cut_rectangle(
     that extends 100 pixels left, 100 pixels right, 200 pixels down, and 100
     pixels up from the its center element.
     """
-    mask_method, op = _pick_mask_constructors(region)
-    if center is True:
-        y_dist, x_dist = centered_indices(arr)
-    else:
-        y_dist, x_dist = np.indices(arr.shape)
-    masks = []
-    x_bounds, y_bounds = bounds
-    for bound, dist in zip((x_bounds, y_bounds), (x_dist, y_dist)):
-        pass_min, pass_max = bound
-        pass_min = pass_min if pass_min is not None else dist.min()
-        pass_max = pass_max if pass_max is not None else dist.max()
-        masks.append(mask_method(dist, pass_min, pass_max).mask)
-    cut_mask = op(*masks)
+    dists = centered_indices(arr) if center is True else np.indices(arr.shape)
+    masks = [
+        _make_cut_mask(dist, bound, region)
+        for bound, dist in zip(bounds, dists)
+    ]
+    cut_mask = _pick_mask_constructors(region)[0](*masks)
     return join_cut_mask(arr, cut_mask, copy)
 
 
-def zerocut(*args, **kwargs) -> np.ndarray:
+def zerocut(
+    arr: np.ndarray,
+    bounds: tuple[tuple[Real, Real], tuple[Real, Real]],
+    region: Literal["inner", "outer"] = "inner",
+    center: bool = True,
+    copy: bool = True
+) -> np.ndarray:
     """
     Convenience wrapper for `cut_rectangle()` that automatically sets all
-    masked elements to 0. Intended primarily for quick renders and spectral
-    analyses.
+    masked elements to 0 and drops the mask. Intended primarily for quick
+    renders and spectral analyses.
     """
-    return zero_mask(cut_rectangle(*args, **kwargs))
+    return zero_mask(cut_rectangle(arr, bounds, region, center, copy))
