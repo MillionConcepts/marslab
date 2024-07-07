@@ -62,6 +62,16 @@ def test_normalize_range():
     assert out[0, 0] == 1
     assert out[2, 0] == -1
     assert out.dtype == np.int16
+    fimg = np.random.random((10, 10)).astype(np.float16)
+    out32 = imgutils.normalize_range(fimg, bounds=(0, 255))
+    assert out32.dtype == np.float32
+    assert (out32.min() == 0) and (abs(out32.max() - 255) < 0.01)
+    out16 = imgutils.normalize_range(
+        fimg, bounds=(0, 255), allow_half_float=True
+    )
+    assert out16.dtype == np.float16
+    assert out16.min() == 0 and out16.max() == 255
+
 
 
 def test_normalize_range_masked():
