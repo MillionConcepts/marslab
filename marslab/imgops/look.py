@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import warnings
+
 """
 This module contains utilities for composing lightweight image processing
 pipelines intended principally for generating "quicklook"-type browse images
@@ -24,8 +28,10 @@ import marslab.spectops
 from marslab.imgops.imgutils import crop_all, map_filter
 
 if TYPE_CHECKING:
+    from matplotlib.figure import Figure
     import numpy as np
     import pandas as pd
+    from PIL.Image import Image
 
 STEP_NAMES = (
     "crop",
@@ -70,6 +76,16 @@ class MaskFill(TypedDict):
     mask_alpha: float
 
 
+class LayerDef(TypedDict):
+    """
+    Format of an element of the 'layers' list that is an optional insert to
+    a 'plotter' step. Only relevant if the plotter function itself understands
+    it.
+    """
+    layer_ix: int
+    image: "np.ndarray"
+
+
 class MaskInstruction(TypedDict):
     """
     'mask' steps defined in the DSL cause the generated Look to construct one
@@ -110,6 +126,8 @@ class LookInstruction(TypedDict):
     limiter: Optional[StepDef]
     # the primary look operation
     look: Union[LookName, Callable]
+    # kwargs for the primary look operation
+    params: Optional[Mapping[str, Any]]
     # if this Look is passed to BandSet.make_look_set(), this specifies which
     # of the BandSet's bands it should send to the Look. Does nothing in other
     # cases.
@@ -141,7 +159,7 @@ def look_to_function(look: str) -> Callable:
     raise ValueError("unknown look operation " + look)
 
 
-def interpret_look_step(instruction):
+def interpret_look_step(instruction: LookInstruction):
     """
     Heart of look pipeline: the look function (spectrum op, dcs, etc.), by
     name or as an explicitly-defined Python function. This step is _mandatory_.
@@ -159,35 +177,41 @@ def interpret_look_step(instruction):
     return step, instruction.get("params", {})
 
 
-def interpret_crop_step(bounds):
+def interpret_crop_step(
+    bounds: Optional[tuple[int, int, int, int]]
+) -> tuple[Callable, dict]:
     """
+    Interpret the crop step of a LookInstruction.
     note at present a cropper is always included whether you ask for it or not,
     but by default it acts as the identity function.
     """
     return crop_all, {"bounds": bounds}
 
 
-def interpret_prefilter_step(chunk):
-    step = chunk["function"]
+def interpret_prefilter_step(inst: PrefilterDef) -> tuple[Callable, dict]:
+    """Interpret the prefilter step of a LookInstruction."""
+    step = inst["function"]
     # by default, wrap the prefilter function so that it works as a variadic
     # function, applying itself to each input channel individually; some
     # notional prefilters may of course not want this!
-    if chunk.get("map") is not False:
+    if inst.get("map") is not False:
         step = map_filter(step)
-    return step, chunk.get("params", {})
+    # noinspection PyTypeChecker
+    return step, inst.get("params", {})
 
 
 def interpret_mask_step(chunk):
+    """Interpret a 'mask' step from a Look instruction."""
     from marslab.imgops.masking import extract_masks
     return extract_masks, chunk
 
 
 def interpret_instruction_step(
-    instruction: Mapping, step_name: str
+    instruction: LookInstruction, step_name: Literal[STEP_NAMES]
 ) -> tuple[Optional[Callable], Mapping]:
     """
-    unpack individual elements of the look instruction markup
-    syntax into steps and kwargs for a Composition.
+    unpack an individual element of a LookInstruction into steps, inserts,
+    and sends for a Composition.
     """
     # check central mandatory element first
     if step_name == "look":
@@ -195,6 +219,11 @@ def interpret_instruction_step(
     # bail out if non-mandatory element is not present
     if step_name not in instruction.keys():
         return None, {}
+    if step_name not in STEP_NAMES:
+        warnings.warn(
+            f"{step_name} is not a known Look step; this may cause unintended "
+            f"behavior."
+        )
     chunk = instruction[step_name]
     # other special cases
     if step_name == "crop":
@@ -203,8 +232,9 @@ def interpret_instruction_step(
         return interpret_prefilter_step(chunk)
     if step_name == "mask":
         return interpret_mask_step(chunk)
-    # specifying a function is mandatory,
-    # specifying bound parameters is not
+    # If no special case is specified, prep for default Composition behavior.
+    # specifying a function is mandatory.
+    # specifying bound parameters is not.
     return chunk["function"], chunk.get("params", {}).copy()
 
 
@@ -224,7 +254,12 @@ class Look(Composition, ABC):
         if (self.metadata is not None) or (self.special_constants is not None):
             self.populate_kwargs()
 
-    def _add_wavelengths(self, wavelengths: Sequence[float]):
+    def _add_wavelengths(self, wavelengths: Sequence[float]) -> bool:
+        """
+        Attempt to add an insert to the look step giving it wavelengths. If -
+        the look step isn't a spectop, don't actually do this.
+        Returns True if the look step is a spectop, and False if not.
+        """
         look = self.steps["look"]
         if "__name__" in dir(look):
             name = look.__name__
@@ -235,7 +270,11 @@ class Look(Composition, ABC):
         self.add_insert("look", "wavelengths", wavelengths)
         return True
 
-    def _get_plotter_layers(self):
+    def _get_plotter_layers(self) -> list[LayerDef]:
+        """
+        If it exists, return the list of layers prepped as an insert to
+        the plotter step. If not, construct an empty one and return it.
+        """
         try:
             return self.inserts['plotter']['layers']
         except KeyError:
@@ -243,6 +282,10 @@ class Look(Composition, ABC):
             return self._get_plotter_layers()
 
     def add_underlay(self, underlay: "np.ndarray", layer_ix: int = -1):
+        """
+        Add an underlay to the plotter step. Will only do
+        anything if the plotter step understands/accepts layers.
+        """
         if "crop" in self.steps:
             underlay = self.steps["crop"](
                 underlay, **self.inserts.get('crop', {})
@@ -254,12 +297,19 @@ class Look(Composition, ABC):
     @classmethod
     def compile_from_instruction(
         cls,
-        instruction: Mapping,
+        instruction: LookInstruction,
         metadata: "pd.DataFrame" = None,
+        # TODO: is this cruft?
         special_constants: Collection[Any] = None
     ):
-        """compile a look instruction into a rendering pipeline"""
-        # only look is required. these are _possible_ steps in the pipeline.
+        """
+        Compile an instruction written in the Look DSL into a rendering
+        pipeline. See the docstring of `LookInstruction` for syntax.
+
+        `metadata` is an optional DataFrame formatted like the `metadata`
+        property of a `Bandset`. Some `Look` functionality will not work
+        without metadata.
+        """
         steps = {}
         inserts = {}
         for step_name in STEP_NAMES:
@@ -284,6 +334,10 @@ class Look(Composition, ABC):
 
     # TODO: is this excessively baroque; would an internal dispatch be better?
     def populate_kwargs(self):
+        """
+        Helper function for Look construction. Populates `Composition`
+        structure implied by `Look.steps` and `Look.metadata`.
+        """
         for step in self.steps:
             params = signature(self.steps[step]).parameters.values()
             param_names = [param.name for param in params]
@@ -305,7 +359,18 @@ class Look(Composition, ABC):
                 self._add_wavelengths(wavelengths)
 
 
-def save_plainly(look, filename, outpath, dpi=275):
+# TODO: doesn't go in this module.
+def save_plainly(
+    look: Union["Figure", "Image"],
+    filename: Union[str, Path],
+    outpath: Union[str, Path],
+    dpi: int = 275
+):
+    """
+    Save a PIL Image or matplotlib Figure as simply as possible to
+    `filename`/`outpath` with specified `dpi`. dpi is ignored if `look` is
+    an `Image`.
+    """
     from matplotlib.figure import Figure
 
     if isinstance(look, Figure):
