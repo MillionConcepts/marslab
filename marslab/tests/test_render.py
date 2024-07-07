@@ -16,7 +16,6 @@ def test_decorrelation_stretch_1():
     for _ in range(100):
         channels = [normal_array() for _ in range(3)]
         stretched = decorrelation_stretch(channels, contrast_stretch=1)
-        print(np.std(normalize_range(np.dstack(channels))), np.std(stretched))
         assert np.std(normalize_range(np.dstack(channels))) < np.std(stretched)
 
 

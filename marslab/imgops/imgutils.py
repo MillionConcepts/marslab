@@ -257,6 +257,7 @@ def normalize_range(
     bounds: tuple[Real, Real] = (0., 1.),
     stretch: Union[float, tuple[float, float], None] = None,
     inplace: bool = False,
+    allow_half_float: bool = False
 ) -> Union[np.ndarray, np.ma.MaskedArray]:
     """
     simple linear min-max scaler that optionally percentile-clips the input at
@@ -296,6 +297,8 @@ def normalize_range(
         np.promote_types,
         map(np.min_scalar_type, filter(None, (*inrange, *bounds)))
     )
+    if mintype == np.float16 and allow_half_float is False:
+        mintype = np.float32
     if not np.can_cast(mintype, arr.dtype):
         arr = arr.astype(mintype)
     # Note that this case will only occur for all-masked input array
