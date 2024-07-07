@@ -29,7 +29,7 @@ from typing import (
 import warnings
 
 from dustgoggles.composition import Composition
-from dustgoggles.func import argstop
+from dustgoggles.func import argstop, triggerize
 
 import marslab.spectops
 from marslab.imgops.imgutils import crop_all, map_filter
@@ -93,17 +93,26 @@ class LayerDef(TypedDict):
     image: "np.ndarray"
 
 
-class MaskInstruction(TypedDict):
-    """
-    'mask' steps defined in the DSL cause the generated Look to construct one
-    or more masks in sequence. This is the format of an sub-instruction in
-    a 'mask' step.
-    """
-    # the primary masking function
-    function: Callable
-    params: NotRequired[Mapping[str, Any]]
-    # specifies a color fill for the mask in downstream
-    colorfill: NotRequired[MaskFill]
+# NOTE: This is written in a weird way because 'pass' is a reserved keyword.
+MaskInstruction = TypedDict(
+    "MaskInstruction",
+    {
+        # the primary masking function
+        "function": Callable,
+        "params": NotRequired[Mapping[str, Any]],
+        # specifies a color fill for the mask in downstream
+        "colorfill": NotRequired[MaskFill],
+        # send the mask as an insert to the plotter step?
+        "send": NotRequired[bool],
+        # pass the mask on to the next function?
+        "pass": NotRequired[bool]
+    }
+)
+"""
+'mask' steps defined in the DSL cause the generated Look to construct one
+or more masks in sequence. This is the format of an sub-instruction in
+a 'mask' step.
+"""
 
 
 class StepDef(TypedDict):
@@ -133,7 +142,7 @@ class LookInstruction(TypedDict):
     # defines a crop on the input image in pixels: (left, right, bottom, top)
     crop: NotRequired[tuple[int, int, int, int]]
     # a first-pass preprocessing step
-    prefilter: NotRequired[StepDef]
+    prefilter: NotRequired[PrefilterDef]
     # an additional preprocessing step
     limiter: NotRequired[StepDef]
     # the primary look operation
@@ -148,6 +157,7 @@ class LookInstruction(TypedDict):
     #  'mask' should just be a sequence of MaskInstructions.
     mask: NotRequired[Mapping[Literal["instructions"], Sequence[MaskInstruction]]]
     limiter: NotRequired[StepDef]
+    plotter: NotRequired[StepDef]
     # optional niladic function called on successful execution of the rest
     # of the Look. can be used for logging or whatever.
     bang: NotRequired[BangDef]
@@ -249,7 +259,7 @@ def interpret_instruction_step(
     if step_name == "mask":
         return interpret_mask_step(chunk)
     if step_name == "bang":
-        return argstop(chunk['function']), chunk.get("params", {}).copy()
+        return triggerize(chunk['function']), chunk.get("params", {}).copy()
     # If no special case is specified, prep for default Composition behavior.
     # specifying a function is mandatory.
     # specifying bound parameters is not.
