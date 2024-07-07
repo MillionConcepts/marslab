@@ -1,9 +1,15 @@
+from pathlib import Path
+
 import numpy as np
+from PIL import Image
+from PIL.JpegImagePlugin import JpegImageFile
+from PIL.PngImagePlugin import PngImageFile
+
 from marslab.imgops.imgutils import normalize_range
-from marslab.imgops.render import decorrelation_stretch
+from marslab.imgops.render import decorrelation_stretch, make_thumbnail
 from marslab.tests.utilz.utilz import normal_array
 
-rng = np.random.default_rng()
+RNG = np.random.default_rng()
 
 
 def test_decorrelation_stretch_1():
@@ -13,55 +19,20 @@ def test_decorrelation_stretch_1():
         print(np.std(normalize_range(np.dstack(channels))), np.std(stretched))
         assert np.std(normalize_range(np.dstack(channels))) < np.std(stretched)
 
-#
-# @given(
-#     channels=(
-#         st.lists(
-#             arrays(
-#                 dtype=np.float32,
-#                 shape=st.shared(
-#                     array_shapes(
-#                         min_dims=2, max_dims=2, min_side=2, max_side=20
-#                     ),
-#                     key="hi"
-#                 ),
-#                 elements={
-#                     "allow_nan": False,
-#                     "allow_infinity": False,
-#                     "min_value": 0,
-#                     "max_value": 256,
-#                 },
-#                 fill=st.nothing(),
-#             ),
-#             min_size=2,
-#         )
-#     )
-# )
-# def test_decorrelation_stretch_2(channels):
-#     # single-valued arrays have undefined covariance
-#     assume(all([not len(np.unique(channel)) == 1 for channel in channels]))
-#     # ridiculously large inputs relative to dtype we expect to cause errors
-#     assume(all([not np.isinf(np.std(channel)) for channel in channels]))
 
-# def check_dcs_input(channels):
-#     if len(channels) < 2:
-#         raise ValueError(
-#             "At least two channels must be passed to this function"
-#         )
-#     if not all_equal([channel.shape for channel in channels]):
-#         raise ValueError(
-#             "arrays passed to this function must have equal shapes"
-#         )
-#     if not all_equal([channel.dtype for channel in channels]):
-#         raise ValueError(
-#             "arrays passed to this function must have equal dtypes"
-#         )
-#     if (
-#         channels[0].dtype.char
-#         not in np.typecodes["AllInteger"] + np.typecodes["AllFloat"]
-#     ):
-#         raise ValueError(
-#             "arrays passed to this function must be integer or float arrays"
-#         )
-
-#
+def test_make_thumbnail():
+    """
+    Test the make_thumbnail function.
+    """
+    try:
+        image = RNG.random((1024, 1024, 3))
+        jpeg_buf = make_thumbnail(image, (128, 128))
+        png_buf = make_thumbnail(image, (512, 512), filetype="png")
+        path = make_thumbnail(image, file_or_path_or_buffer="test.png")
+        jpeg_buf.seek(0)
+        png_buf.seek(0)
+        assert JpegImageFile(jpeg_buf).size == (128, 128)
+        assert PngImageFile(png_buf).size == (512, 512)
+        assert Image.open(path).size == (256, 256)
+    finally:
+        Path("test.png").unlink(missing_ok=True)
