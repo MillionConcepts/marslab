@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-import warnings
-
 """
 This module contains utilities for composing lightweight image processing
 pipelines intended principally for generating "quicklook"-type browse images
@@ -12,14 +8,25 @@ sequence of functions to one or more input arrays. This module also implements
 a simple DSL intended to allow users to modify the quicklook behavior of an
 application by editing external configuration files.
 """
+from __future__ import annotations
+
 from abc import ABC
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from inspect import signature
 from pathlib import Path
 from typing import (
-    Any, Collection, Literal, Optional, TYPE_CHECKING, TypedDict, Union, Hashable
+    Any,
+    Collection,
+    Hashable,
+    Literal,
+    Optional,
+    NotRequired,
+    TYPE_CHECKING,
+    TypedDict,
+    Union
 )
+import warnings
 
 from dustgoggles.composition import Composition
 from dustgoggles.func import argstop
@@ -94,9 +101,9 @@ class MaskInstruction(TypedDict):
     """
     # the primary masking function
     function: Callable
-    params: Optional[Mapping[str, Any]]
+    params: NotRequired[Mapping[str, Any]]
     # specifies a color fill for the mask in downstream
-    colorfill: Optional[MaskFill]
+    colorfill: NotRequired[MaskFill]
 
 
 class StepDef(TypedDict):
@@ -104,14 +111,19 @@ class StepDef(TypedDict):
     # explicitly-given Python function
     function: Callable
     # kwargs to pass to `function``
-    params: Optional[Mapping[str, Any]]
+    params: NotRequired[Mapping[str, Any]]
 
 
 class PrefilterDef(StepDef):
     """Format of prefilter step."""
     # if True, assumes the first argument is a tuple of arrays, and applies the
     # prefilter function separately to each.
-    map: Optional[bool]
+    map: NotRequired[bool]
+
+
+class BangDef(TypedDict):
+    function: Callable[[], Any]
+    params: NotRequired[Mapping[str, Any]]
 
 
 class LookInstruction(TypedDict):
@@ -119,23 +131,26 @@ class LookInstruction(TypedDict):
     Look DSL instructions are Python Mappings that follow this structure.
     """
     # defines a crop on the input image in pixels: (left, right, bottom, top)
-    crop: Optional[tuple[int, int, int, int]]
+    crop: NotRequired[tuple[int, int, int, int]]
     # a first-pass preprocessing step
-    prefilter: Optional[StepDef]
+    prefilter: NotRequired[StepDef]
     # an additional preprocessing step
-    limiter: Optional[StepDef]
+    limiter: NotRequired[StepDef]
     # the primary look operation
     look: Union[LookName, Callable]
     # kwargs for the primary look operation
-    params: Optional[Mapping[str, Any]]
+    params: NotRequired[Mapping[str, Any]]
     # if this Look is passed to BandSet.make_look_set(), this specifies which
     # of the BandSet's bands it should send to the Look. Does nothing in other
     # cases.
-    bands: Optional[Sequence[Hashable]]
+    bands: NotRequired[Sequence[Hashable]]
     # TODO: it's a silly hack to have a required 'instructions' key;
     #  'mask' should just be a sequence of MaskInstructions.
-    mask: Optional[Mapping[Literal["instructions"], Sequence[MaskInstruction]]]
-    limiter: Optional[StepDef]
+    mask: NotRequired[Mapping[Literal["instructions"], Sequence[MaskInstruction]]]
+    limiter: NotRequired[StepDef]
+    # optional niladic function called on successful execution of the rest
+    # of the Look. can be used for logging or whatever.
+    bang: NotRequired[BangDef]
 
 
 # TODO, maybe: we need complicated Protocol stuff to precisely type-hint this
@@ -224,6 +239,7 @@ def interpret_instruction_step(
             f"{step_name} is not a known Look step; this may cause unintended "
             f"behavior."
         )
+    # noinspection PyTypedDict
     chunk = instruction[step_name]
     # other special cases
     if step_name == "crop":
@@ -232,6 +248,8 @@ def interpret_instruction_step(
         return interpret_prefilter_step(chunk)
     if step_name == "mask":
         return interpret_mask_step(chunk)
+    if step_name == "bang":
+        return argstop(chunk['function']), chunk.get("params", {}).copy()
     # If no special case is specified, prep for default Composition behavior.
     # specifying a function is mandatory.
     # specifying bound parameters is not.
