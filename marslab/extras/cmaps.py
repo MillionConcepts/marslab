@@ -1,6 +1,6 @@
 from itertools import product
 
-from matplotlib.cm import register_cmap
+from matplotlib import colormaps
 from matplotlib.colors import ListedColormap
 import numpy as np
 
@@ -34,5 +34,5 @@ def make_aqua_pink_accent_cmap():
     return ListedColormap(vals, name="aqua_pink")
 
 
-register_cmap(cmap=make_orange_teal_cmap())
-register_cmap(cmap=make_aqua_pink_accent_cmap())
+colormaps.register(cmap=make_orange_teal_cmap())
+colormaps.register(cmap=make_aqua_pink_accent_cmap())
