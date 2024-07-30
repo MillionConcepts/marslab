@@ -161,6 +161,8 @@ class LookInstruction(TypedDict):
     # optional niladic function called on successful execution of the rest
     # of the Look. can be used for logging or whatever.
     bang: NotRequired[BangDef]
+    # optional identifier for look
+    name: NotRequired[str]
 
 
 # TODO, maybe: we need complicated Protocol stuff to precisely type-hint this
