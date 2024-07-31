@@ -6,6 +6,7 @@ from multiprocessing import active_children, Pool
 import time
 from types import MappingProxyType
 from typing import Optional, TYPE_CHECKING, Union
+import warnings
 
 if TYPE_CHECKING:
     from pathos.multiprocessing import ProcessPool
@@ -78,7 +79,8 @@ def wait_for_it(
     callback: Optional[Callable] = None,
     interval: float = 0.1,
     as_dict: bool = False,
-    timeout: Optional[float] = None
+    timeout: Optional[float] = None,
+    raise_exceptions: bool = True
 ) -> Union[dict, list]:
     if (callback is None) and (log is not None):
         callback = simple_log_callback(log, message)
@@ -92,6 +94,14 @@ def wait_for_it(
                 os.kill(c.pid, 30)
             raise TimeoutError("Pool timed out")
     pool.join()
-    if as_dict:
-        return {key: result.get() for key, result in results.items()}
-    return [result.get() for result in results.values()]
+    output = {}
+    for key, result in results.items():
+        try:
+            output[key] = result.get()
+        except Exception as ex:
+            if raise_exceptions is True:
+                raise ex
+            output[key] = ex
+    if as_dict is True:
+        return output
+    return list(output.values())

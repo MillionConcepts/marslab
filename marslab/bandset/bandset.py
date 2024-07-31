@@ -8,6 +8,7 @@ import os
 from collections.abc import Mapping, Callable, Collection, Sequence
 from pathlib import Path
 from typing import Optional, Union, MutableMapping, Any
+import warnings
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
@@ -138,12 +139,17 @@ class BandSet:
         loading = load_df.loc[load_df["BAND"].isin(bands)]
         chunked_by_file = loading.dropna(subset=["PATH"]).groupby("PATH")
         # TODO, maybe: dispatch single and multithreaded cases separately?
+        failures = {}
         if pool is None:
             results = []
             for path, band_df in chunked_by_file:
-                results.append(
-                    self.load_method(path, band_df, bands, self.precached))
-                log.info("loaded " + path)
+                try:
+                    results.append(
+                        self.load_method(path, band_df, bands, self.precached)
+                    )
+                    log.info("loaded " + path)
+                except Exception as ex:
+                    failures[path] = ex
         else:
             results = {}
             # caution: dict comprehension does _not_ work well here
@@ -151,8 +157,22 @@ class BandSet:
                 results[path] = pool.apipe(
                     self.load_method, path, band_df, bands
                 )
-            results = wait_for_it(pool, results, log)
+            results = wait_for_it(pool, results, log, raise_exceptions=False)
+            for path, result in tuple(results.items()):
+                if isinstance(result, Exception):
+                    failures[path] = result
+                    results.pop(path)
         self.raw |= merge(results)
+        for path, ex in failures.items():
+            pname = Path(path).name
+            warnings.warn(
+                f"failure on {pname}: {type(ex)}: {ex}; discarding {pname}"
+            )
+        if len(failures) == 0:
+            return
+        self.metadata = self.metadata.loc[
+            ~self.metadata["PATH"].isin(failures.keys())
+        ].copy().reset_index(drop=True)
 
     def make_db_masks(self, shape: Sequence[int, int] = None, remake=False):
         if self.bayer_info is None:
