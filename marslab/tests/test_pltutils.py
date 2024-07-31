@@ -33,9 +33,9 @@ def test_with_trivial_case():
     assert rendered.getextrema() == ((0, 255), (0, 255), (0, 255), (255, 255))
     imstats = Stat(rendered)
     # should be redder than it is green
-    assert imstats._getmean()[0] > imstats._getmean()[1]
+    assert imstats.mean[0] > imstats.mean[1]
     # and also more consistently red
-    assert imstats._getvar()[0] < imstats._getvar()[1]
+    assert imstats.var[0] < imstats.var[1]
     strip_axes(ax)
     strip_axes(colorbar)
     rendered = render_in_memory(fig)

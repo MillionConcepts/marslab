@@ -22,3 +22,6 @@ dependencies:
   - fast-histogram
   - scikit-image
   - opencv
+  # optional dependency for testing
+  - pytest
+  - hypothesis
