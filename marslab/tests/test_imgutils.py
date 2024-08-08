@@ -1,7 +1,10 @@
+import warnings
 from itertools import product
 
-from marslab.imgops import imgutils
 import numpy as np
+
+from marslab.imgops import imgutils
+from marslab.tests.utilz.div0 import divide_by_zero
 
 RNG = np.random.default_rng()
 
@@ -45,14 +48,16 @@ class TestEightbit:
         """
         Test function for eightbit() dtype handling.
         """
-        randarrays = tuple(RNG.random((128, 128)) for _ in range(5))
-        dtypes = [*np.typecodes['AllFloat'], *np.typecodes['AllInteger']]
-        for arr, dtype in product(randarrays, dtypes):
-            eight = imgutils.eightbit(arr.astype(dtype))
-            assert np.isin(eight.min(), (0, 255))
-            assert np.isin(eight.max(), (0, 255))
-            assert eight.dtype == np.uint8
-            assert eight.min() <= eight.max()
+        with warnings.catch_warnings():
+            divide_by_zero()
+            randarrays = tuple(RNG.random((128, 128)) for _ in range(5))
+            dtypes = [*np.typecodes['Float'], *np.typecodes['AllInteger']]
+            for arr, dtype in product(randarrays, dtypes):
+                eight = imgutils.eightbit(arr.astype(dtype))
+                assert np.isin(eight.min(), (0, 255))
+                assert np.isin(eight.max(), (0, 255))
+                assert eight.dtype == np.uint8
+                assert eight.min() <= eight.max()
 
 
 def test_normalize_range():
@@ -71,7 +76,6 @@ def test_normalize_range():
     )
     assert out16.dtype == np.float16
     assert out16.min() == 0 and out16.max() == 255
-
 
 
 def test_normalize_range_masked():

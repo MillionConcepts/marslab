@@ -1,4 +1,4 @@
-from collections import ChainMap
+import warnings
 
 import numpy as np
 from hypothesis import given, strategies as st, assume
@@ -6,6 +6,7 @@ from hypothesis.extra.numpy import arrays, array_shapes
 
 from marslab.imgops.render import decorrelation_stretch
 from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
+from marslab.tests.utilz.div0 import divide_by_zero
 
 
 @given(
@@ -42,19 +43,20 @@ from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
 def test_fuzz_decorrelation_stretch_nice(
     channels, contrast_stretch, special_constants, sigma
 ):
-    # try:
-    # single-valued arrays have undefined covariance
-    assume(all([not len(np.unique(channel)) == 1 for channel in channels]))
-    # ridiculously large inputs relative to dtype we expect to cause errors
-    assume(all([not np.isinf(np.std(channel)) for channel in channels]))
-    if special_constants is not None:
-        channels = [
-            np.ma.masked_where(np.isin(c, special_constants), c)
-            for c in channels
-        ]
-    decorrelation_stretch(
-        channels=channels, contrast_stretch=contrast_stretch, sigma=sigma
-    )
+    with warnings.catch_warnings():
+        divide_by_zero()
+        # single-valued arrays have undefined covariance
+        assume(all([not len(np.unique(channel)) == 1 for channel in channels]))
+        # ridiculously large inputs relative to dtype we expect to cause errors
+        assume(all([not np.isinf(np.std(channel)) for channel in channels]))
+        if special_constants is not None:
+            channels = [
+                np.ma.masked_where(np.isin(c, special_constants), c)
+                for c in channels
+            ]
+        decorrelation_stretch(
+            channels=channels, contrast_stretch=contrast_stretch, sigma=sigma
+        )
 
 
 # @hset(max_examples=500, verbosity=Verbosity.verbose)

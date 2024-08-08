@@ -309,7 +309,7 @@ def normalize_range(
     )
     scale_up, scale_down = map(np.ptp, (bounds, inrange))
     # TODO, maybe: messy
-    if arr.dtype.char in np.typecodes["AllFloat"]:
+    if arr.dtype.char in np.typecodes["Float"]:
         # nonsensical-looking but effective floating point OOB cheat
         smax = (inrange[1] - inrange[0]) * scale_up / scale_down + bounds[0]
         if smax > bounds[1]:
@@ -420,7 +420,7 @@ def sinh_scale(
     finite = np.ma.masked_invalid(arr)
     fmin, fmax = finite.min(), finite.max()
     scaling = 1 / (fmax - fmin)
-    if arr.dtype.char in np.typecodes["AllFloat"]:
+    if arr.dtype.char in np.typecodes["Float"]:
         scaling = arr.dtype.type(scaling)
     normed = normalize_range(
         np.sinh((finite - fmin) * scaling * stretch - 0.5), bounds
