@@ -1,11 +1,22 @@
 """
 inline rendering functions for look pipelines. can also be called on their own.
 """
+from __future__ import annotations
+
 import io
 from functools import reduce
 from itertools import chain, repeat
 from pathlib import Path
-from typing import Collection, Optional, Sequence, Union, Callable, Mapping, TypedDict
+from typing import (
+    Callable,
+    Collection,
+    Mapping,
+    Optional,
+    Sequence,
+    TypedDict,
+    TYPE_CHECKING,
+    Union
+)
 
 from dustgoggles.structures import separate_by
 import matplotlib as mpl
@@ -27,6 +38,9 @@ from marslab.imgops.pltutils import (
     attach_axis, get_mpl_image, set_colorbar_font, strip_axes
 )
 from marslab.spectops import Specvals
+
+if TYPE_CHECKING:
+    from marslab.imgops.look import LookInstruction
 
 
 def decorrelation_stretch(
@@ -277,7 +291,7 @@ def colormapped_plot(
             np.ndarray, dict[str, Union[int, np.ndarray]]
         ]
     ] = None,
-    n_ticks=3
+    n_ticks=6
 ):
     """
     generate a colormapped plot, optionally with colorbar, from 2D array.
@@ -342,41 +356,48 @@ def colormapped_plot(
 
 
 def _tformat(number: float, order: int, precision: int):
-    """Standard compact tick label formatter."""
+    """Standard compact tick label rounder / formatter."""
     if order > 2:
+        # use exponential notation when value range is < 0.1
         formatted = ("{:." + str(precision) + "e}").format(number)
+        # remove pointless leading 0 in exponent
         return "".join([formatted[:-2], formatted[-1]])
     if order + precision < 0:
-        return round(number)
-    return round(number, order + precision)
+        return str(round(number))
+    return str(number)
 
 
 # TODO, maybe: this only works well with certain sorts of value ranges.
 def _trylabel(
-    order: int, precision: int, gauge: np.ndarray, n_ticks: int
-) -> tuple[list[float], list[float]]:
+    bounds: tuple[float, float], order: int, precision: int, n_ticks: int
+) -> tuple[Union[np.ndarray, list[str]], bool]:
     """
     Attempts to find label positions that maximize coverage while minimizing
     required decimal places.
     """
-    ticks, labels = [], []
-    for t in gauge:
+    # 100 is arbitrary, basically the resolution of the solver
+    grid = np.linspace(bounds[0], bounds[1], n_ticks * 100)
+    labels = sorted(
+        {_tformat(round(n, order + precision), order, precision) for n in grid}
+    )
+    labels = np.array(labels)
+    positions = labels.astype(float)
+    inbounds = (positions <= grid.max()) & (positions >= grid.min())
+    labels, positions = labels[inbounds], positions[inbounds]
+    labels, positions = labels[np.argsort(positions)], np.sort(positions)
+    # NOTE: 20% range cutoff here is totally arbitrary
+    if (
+        positions.size < n_ticks
+        or abs((positions.max() - grid.max()) / grid.max()) > 0.2
+        or abs((positions.min() - grid.min()) / grid.min()) > 0.2
+    ):
         # noinspection PyTypeChecker
-        formatted = _tformat(t, order, precision)
-        if formatted in labels:
-            continue
-        ticks.append(t)
-        labels.append(formatted)
-    if len(labels) > n_ticks:
-        indices = []
-        n_ticks = 10  # TODO: why is this fallback hardcoded as 10?
-        needed = n_ticks
-        tickarr = np.array(ticks)
-        for cutoff in np.percentile(tickarr, np.linspace(0, 100, needed)):
-            indices.append(np.argmin(np.abs(tickarr - cutoff)))
-        ticks = [ticks[ix] for ix in indices]
-        labels = [labels[ix] for ix in indices]
-    return ticks, labels
+        return labels, False
+    outlabels = []
+    for ideal in np.linspace(bounds[0], bounds[1], n_ticks):
+        outlabels.append(labels[np.argmin(abs(positions - ideal))])
+    # noinspection PyTypeChecker
+    return outlabels, True
 
 
 def attach_colorbar(
@@ -384,7 +405,7 @@ def attach_colorbar(
     cmap: Union[str, mpl.colors.Colormap],
     colorbar_fp: Optional[mpl.font_manager.FontProperties] = None,
     norm: Optional[mpl.colors.Normalize] = None,
-    n_ticks: int = 3
+    n_ticks: int = 5
 ):
     """
     Attach a colorbar tightly to a matplotlib axis. Is typically much better
@@ -396,13 +417,17 @@ def attach_colorbar(
     )
     ymin, ymax = colorbar.ax.get_ylim()
     extent = ymax - ymin
-    gauge = np.linspace(ymin, ymax, n_ticks * 4 - 1)
     order = int(1 - np.floor(np.log10(extent)))
-    precision, ticks, labels = 0, [], []
-    while len(labels) < (n_ticks - 1):
-        ticks, labels = _trylabel(order, precision, gauge, n_ticks)
+    precision, success = 0, False
+    print(f'---order {order}---')
+    while success is False:
+        labels, success = _trylabel((ymin, ymax), order, precision, n_ticks)
         precision += 1
-    colorbar.ax.set_yticks(ticks)
+        if precision > 10:
+            raise ValueError("Tick placement not terminating; check range.")
+    # noinspection PyTypeChecker
+    # noinspection PyUnboundLocalVariable
+    colorbar.ax.set_yticks(list(map(float, labels)))
     colorbar.ax.set_yticklabels(labels)
     if colorbar_fp:
         set_colorbar_font(colorbar, colorbar_fp)
@@ -493,7 +518,7 @@ def render_nested_rgb_composite(
     metadata,
     special_constants=None,
     norm_kwargs=None,
-    **channel_instructions: Mapping[str, dict],
+    **channel_instructions: "LookInstruction"
 ):
     # TODO: is there a cleaner way to handle this import?
     from marslab.imgops.look import Look
