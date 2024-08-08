@@ -19,13 +19,13 @@ from marslab.tests.utilz.div0 import divide_by_zero
             elements={
                 "allow_nan": False,
                 "allow_infinity": False,
-                "min_value": -1E8,
-                "max_value": 1E8,
+                "min_value": -1e8,
+                "max_value": 1e8,
             },
             fill=st.nothing(),
         ),
         min_size=3,
-        max_size=3
+        max_size=3,
     ),
     contrast_stretch=st.one_of(
         st.none(),
@@ -34,10 +34,7 @@ from marslab.tests.utilz.div0 import divide_by_zero
             st.floats(min_value=0, max_value=100), max_size=2, min_size=2
         ),
     ),
-    special_constants=st.one_of(
-        st.none(),
-        st.lists(finite_floats)
-    ),
+    special_constants=st.one_of(st.none(), st.lists(finite_floats)),
     sigma=st.one_of(st.none(), positive_finite_floats),
 )
 def test_fuzz_decorrelation_stretch_nice(

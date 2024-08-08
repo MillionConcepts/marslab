@@ -30,7 +30,7 @@ Specvals = Union[
     pd.Series,
     Sequence[float],
     Sequence[Sequence[float]],
-    np.ndarray
+    np.ndarray,
 ]
 """
 Valid types for "spectral data" arguments to many functions in this module.
@@ -42,7 +42,7 @@ def preprocess_input(
     errors: Optional[Specvals] = None,
     wavelengths: Optional[Specvals] = None,
     band_arity: Optional[int] = None,
-    require_wavelengths: bool = False
+    require_wavelengths: bool = False,
 ) -> tuple[Specvals, Specvals, Specvals]:
     """
     Did someone pass a spectop function something silly? If so, raise an
@@ -84,7 +84,9 @@ def reindex_or_mask(
         if isinstance(pair[1], (pd.DataFrame, pd.Series)):
             thing = pd.Series(thing, index=pair[1].columns)
         elif isinstance(pair[1], Sequence):
-            masked = filter(lambda a: isinstance(a, np.ma.MaskedArray), pair[1])
+            masked = filter(
+                lambda a: isinstance(a, np.ma.MaskedArray), pair[1]
+            )
             masks = [m.mask for m in masked]
             if len(masks) > 0:
                 thing = np.ma.masked_array(thing, mask=sum(masks))
@@ -142,7 +144,7 @@ def band_avg(
 def slope(
     reflectance: Specvals,
     errors: Optional[Specvals] = None,
-    wavelengths: Optional[Specvals] = None
+    wavelengths: Optional[Specvals] = None,
 ) -> list[Specvals]:
     """
     Just a slope function. notionally, slope of a line segment in the
@@ -172,7 +174,7 @@ def band_depth(
     """
     ref_arr, err_arr, wave_arr = preprocess_input(
         reflectance, errors, wavelengths, 3, True
-    )    
+    )
     left, right, middle = wave_arr[:3]
     if len({left, right, middle}) != 3:
         raise ValueError(

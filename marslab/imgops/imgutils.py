@@ -14,7 +14,11 @@ from typing import (
     Collection,
     Mapping,
     Union,
-    MutableSequence, Any, Hashable, Optional, Literal,
+    MutableSequence,
+    Any,
+    Hashable,
+    Optional,
+    Literal,
 )
 
 from dustgoggles.structures import dig_for_values
@@ -70,9 +74,9 @@ def eightbit(
       corresponding masked values of the output array with 0s to prevent
       undesirable typecasting behaviors.
     """
-    if array.dtype.char == 'B' and stretch is None:
+    if array.dtype.char == "B" and stretch is None:
         return array
-    if array.dtype.char == 'B':
+    if array.dtype.char == "B":
         return normalize_range(array, (0, 255), stretch)
     output = normalize_range(array, (0, 255), stretch)
     if isinstance(output, np.ma.MaskedArray):
@@ -86,7 +90,7 @@ def cropmask(
     arr: np.ndarray,
     bounds: Optional[tuple[int, int, int, int]] = None,
     copy: bool = True,
-    **_
+    **_,
 ) -> np.ndarray:
     """
     Return a MaskedArray based on `arr` with all elements that fall within a
@@ -107,14 +111,12 @@ def cropmask(
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
                 pixels[value] = pixels[value] * -1
-    canvas[pixels[2]: pixels[3], pixels[0]: pixels[1]] = 0
+    canvas[pixels[2] : pixels[3], pixels[0] : pixels[1]] = 0
     if isinstance(arr, np.ma.MaskedArray):
         if copy is True:
             arr.mask = np.logical_or(canvas, arr.mask)
             return arr
-        return np.ma.masked_array(
-            arr.data, np.logical_or(canvas, arr.mask)
-        )
+        return np.ma.masked_array(arr.data, np.logical_or(canvas, arr.mask))
     return np.ma.masked_array(arr, canvas)
 
 
@@ -134,7 +136,7 @@ def crop(
         if isinstance(pixels[value], int):
             if pixels[value] > 0:
                 pixels[value] = pixels[value] * -1
-    return arr[pixels[2]: pixels[3], pixels[0]: pixels[1]]
+    return arr[pixels[2] : pixels[3], pixels[0] : pixels[1]]
 
 
 def crop_all(
@@ -254,10 +256,10 @@ def find_unmasked_bounds(
 
 def normalize_range(
     arr: np.ndarray,
-    bounds: tuple[Real, Real] = (0., 1.),
+    bounds: tuple[Real, Real] = (0.0, 1.0),
     stretch: Union[float, tuple[float, float], None] = None,
     inplace: bool = False,
-    allow_half_float: bool = False
+    allow_half_float: bool = False,
 ) -> Union[np.ndarray, np.ma.MaskedArray]:
     """
     simple linear min-max scaler that optionally percentile-clips the input at
@@ -295,7 +297,7 @@ def normalize_range(
             arr = np.clip(arr, *inrange)
     mintype = reduce(
         np.promote_types,
-        map(np.min_scalar_type, filter(None, (*inrange, *bounds)))
+        map(np.min_scalar_type, filter(None, (*inrange, *bounds))),
     )
     if mintype == np.float16 and allow_half_float is False:
         mintype = np.float32
@@ -313,7 +315,7 @@ def normalize_range(
         # nonsensical-looking but effective floating point OOB cheat
         smax = (inrange[1] - inrange[0]) * scale_up / scale_down + bounds[0]
         if smax > bounds[1]:
-            scale_up *= (1 + (bounds[1] - smax))
+            scale_up *= 1 + (bounds[1] - smax)
     if inplace is True:
         arr -= inrange[0]
         arr *= scale_up
@@ -327,12 +329,8 @@ def normalize_range(
         arr += bounds[0]
         return arr
     elif arr.dtype.char in np.typecodes["AllInteger"]:
-        return (
-            ((arr - inrange[0]) * scale_up) // scale_down + bounds[0]
-        )
-    return (
-        (arr - inrange[0]) * scale_up / scale_down + bounds[0]
-    )
+        return ((arr - inrange[0]) * scale_up) // scale_down + bounds[0]
+    return (arr - inrange[0]) * scale_up / scale_down + bounds[0]
 
 
 def enhance_color(image: np.ndarray, bounds, stretch):
@@ -400,7 +398,7 @@ def minmax_clip(arr: np.ndarray, stretch: tuple[float, float] = (0, 0)):
     result = np.ma.clip(
         finite,
         finite.dtype.type(fmin + stretch[0] * ptp),
-        finite.dtype.type(fmax - stretch[1] * ptp)
+        finite.dtype.type(fmax - stretch[1] * ptp),
     )
     if isinstance(arr, np.ma.MaskedArray):
         return np.ma.masked_array(result.data, mask=(arr.mask + result.mask))
@@ -409,8 +407,8 @@ def minmax_clip(arr: np.ndarray, stretch: tuple[float, float] = (0, 0)):
 
 def sinh_scale(
     arr: np.ndarray,
-    bounds: tuple[Number, Number] = (0., 1.),
-    stretch: float = 1
+    bounds: tuple[Number, Number] = (0.0, 1.0),
+    stretch: float = 1,
 ) -> np.ndarray:
     """
     Applies a simple hyperbolic sine stretch to the input array. Maintains
@@ -523,7 +521,7 @@ def apply_image_filter(image, image_filter=None):
 def mapfilter(
     predicate: Callable[[Any], bool],
     key: Optional[Hashable],
-    map_sequence: Sequence[Mapping]
+    map_sequence: Sequence[Mapping],
 ) -> list[Mapping]:
     """
     Return a list containing all elements of map_sequence such that, if `key`
@@ -540,8 +538,7 @@ def mapfilter(
 
 
 def make_mask_passer(
-    func: Callable[[np.ndarray, ...], np.ndarray],
-    mask_nans=True
+    func: Callable[[np.ndarray, ...], np.ndarray], mask_nans=True
 ) -> Callable[[np.ndarray, ...], np.ndarray]:
     """
     Function decorator for functions that take at least a single positional
@@ -551,6 +548,7 @@ def make_mask_passer(
     mutates the mask inplace or similar. Optionally (and by default), also
     mask NaNs inline.
     """
+
     def mask_passer(array, *args, **kwargs):
         transformed = func(array, *args, **kwargs)
         if isinstance(array, np.ma.MaskedArray):
@@ -658,9 +656,8 @@ def ravel_valid(arr: np.ndarray) -> np.ndarray:
     and/or don't respect masks.
     """
     raveled = arr.ravel()
-    if (
-        arr.dtype.char in np.typecodes["AllInteger"]
-        and not isinstance(arr, np.ma.MaskedArray)
+    if arr.dtype.char in np.typecodes["AllInteger"] and not isinstance(
+        arr, np.ma.MaskedArray
     ):
         # this case can't actually have 'invalid' values and it is a waste of
         # time to check for them
@@ -710,9 +707,7 @@ def nanmask(arr: np.ndarray, copy: bool = True) -> np.ndarray:
 
 
 def make_mask_canvas(
-    image: np.ma.MaskedArray,
-    unmasked_alpha: float = 1,
-    mask_alpha: float = 0
+    image: np.ma.MaskedArray, unmasked_alpha: float = 1, mask_alpha: float = 0
 ) -> np.ndarray:
     """
     Creates a half-float array shaped like the first two dimensions of `image`,
@@ -794,10 +789,10 @@ def maskwhere(
 
 
 def _pick_mask_constructors(
-    region: Literal['inner', 'outer']
+    region: Literal["inner", "outer"]
 ) -> tuple[
     Callable[[np.ndarray, Any, Any], np.ma.MaskedArray],
-    Callable[[np.ndarray, np.ndarray], np.ndarray]
+    Callable[[np.ndarray, np.ndarray], np.ndarray],
 ]:
     """
     Helper function for cut_annulus() and cut_rectangle(). Selects a relation
@@ -814,7 +809,7 @@ def _pick_mask_constructors(
 def _make_cut_mask(
     distance: np.ndarray,
     bounds: tuple[Real, Real],
-    region: Literal["inner", "outer"]
+    region: Literal["inner", "outer"],
 ) -> np.ndarray:
     """
     Generate a mask based on whether elements of `distance` fall within
@@ -847,7 +842,7 @@ def radial_index(arr: np.ndarray) -> np.ndarray:
     the 2D array `arr` (or any other array of its shape).
     """
     y_ix, x_ix = centered_indices(arr)
-    return np.sqrt(y_ix**2 + x_ix**2)
+    return np.sqrt(y_ix ** 2 + x_ix ** 2)
 
 
 def join_cut_mask(
@@ -875,7 +870,7 @@ def cut_annulus(
     arr: np.ndarray,
     bounds: tuple[Real, Real],
     region: Literal["inner", "outer"] = "inner",
-    copy: bool = True
+    copy: bool = True,
 ) -> np.ma.MaskedArray:
     """
     Return a version of the 2D ndarray `arr` with all values
@@ -900,7 +895,7 @@ def cut_rectangle(
     bounds: tuple[tuple[Real, Real], tuple[Real, Real]],
     region: Literal["inner", "outer"] = "inner",
     center: bool = True,
-    copy: bool = True
+    copy: bool = True,
 ) -> np.ma.MaskedArray:
     """
     Return a version of the 2D ndarray `arr` with all values
@@ -933,7 +928,7 @@ def zerocut(
     bounds: tuple[tuple[Real, Real], tuple[Real, Real]],
     region: Literal["inner", "outer"] = "inner",
     center: bool = True,
-    copy: bool = True
+    copy: bool = True,
 ) -> np.ndarray:
     """
     Convenience wrapper for `cut_rectangle()` that automatically sets all

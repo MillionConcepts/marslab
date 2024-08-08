@@ -33,7 +33,6 @@ class TestCrop:
 
 
 class TestEightbit:
-
     def test_eightbit(self):
         img = np.ones((10, 10))
         img[2] = 0
@@ -51,7 +50,7 @@ class TestEightbit:
         with warnings.catch_warnings():
             divide_by_zero()
             randarrays = tuple(RNG.random((128, 128)) for _ in range(5))
-            dtypes = [*np.typecodes['Float'], *np.typecodes['AllInteger']]
+            dtypes = [*np.typecodes["Float"], *np.typecodes["AllInteger"]]
             for arr, dtype in product(randarrays, dtypes):
                 eight = imgutils.eightbit(arr.astype(dtype))
                 assert np.isin(eight.min(), (0, 255))
@@ -126,7 +125,7 @@ def test_clip_unmasked():
     img[5] = 3
     img.mask[5] = True
     out = imgutils.clip_unmasked(img)
-    assert (out.min() == 0 and out.max() == 1)
+    assert out.min() == 0 and out.max() == 1
 
 
 def test_bilinear_interpolate_subgrid():
@@ -140,7 +139,7 @@ def test_bilinear_interpolate_subgrid():
             [8, 9, 10, 11],
             [12, 13, 14, 15],
         ],
-        dtype=np.float32
+        dtype=np.float32,
     )
     rows, columns = np.array([0, 2, 4, 6]), np.array([1, 3, 5, 7])
     result = imgutils.bilinear_interpolate_subgrid(
@@ -148,16 +147,16 @@ def test_bilinear_interpolate_subgrid():
     )
     expected = np.array(
         [
-            [0., 0., 0.5, 1., 1.5, 2., 2.5, 3.],
-            [2., 2., 2.5, 3., 3.5, 4., 4.5, 5.],
-            [4., 4., 4.5, 5., 5.5, 6., 6.5, 7.],
-            [6., 6., 6.5, 7., 7.5, 8., 8.5, 9.],
-            [8., 8., 8.5, 9., 9.5, 10., 10.5, 11.],
-            [10., 10., 10.5, 11., 11.5, 12., 12.5, 13.],
-            [12., 12., 12.5, 13., 13.5, 14., 14.5, 15.],
-            [12., 12., 12.5, 13., 13.5, 14., 14.5, 15.]
+            [0.0, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            [2.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
+            [4.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0],
+            [6.0, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0],
+            [8.0, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0],
+            [10.0, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0],
+            [12.0, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0],
+            [12.0, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0],
         ],
-        dtype=np.float32
+        dtype=np.float32,
     )
     assert np.allclose(result, expected)
 

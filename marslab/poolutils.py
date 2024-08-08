@@ -46,7 +46,7 @@ def watch_pool(
     result_map: Mapping,
     interval: float = 0.1,
     callback: Optional[Callable] = None,
-    timeout: Optional[float] = None
+    timeout: Optional[float] = None,
 ) -> Mapping:
     start = time.time()
     in_readiness = {
@@ -88,7 +88,7 @@ def wait_for_it(
     callback: Optional[Callable] = None,
     interval: float = 0.1,
     as_dict: bool = False,
-    timeout: Optional[float] = None
+    timeout: Optional[float] = None,
 ) -> Union[dict, list]:
     if (callback is None) and (log is not None):
         callback = simple_log_callback(log, message)

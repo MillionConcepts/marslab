@@ -19,17 +19,17 @@ def test_vicarlike_coordinate_system_transformations():
     data = pdr.read(Path(__file__).parent / "data" / "coords.lbl")
     # perform managed transformation of solar direction vector from ROVER
     # frame to SITE frame
-    site_alt, site_az, _ = transform_angle('ROVER', 'SITE', 'SOLAR', data)
+    site_alt, site_az, _ = transform_angle("ROVER", "SITE", "SOLAR", data)
     # get the quaternion that will rotate SITE frame to ROVER frame
     reverse_rot = invert_quaternion(
-        get_coordinate_system_properties('ROVER', data)['quaternion']
+        get_coordinate_system_properties("ROVER", data)["quaternion"]
     )
     # rotate the computed solar direction vector back to ROVER frame
     rov_el, rov_az, _ = rotate_unit_vector(site_alt, site_az, reverse_rot)
     # compare it to vector explicitly given in the label
-    rov_coords = get_coordinates(data)['ROVER']['SOLAR']
-    assert np.isclose(rov_el, rov_coords['ELEVATION'])
-    assert np.isclose(rov_az, rov_coords['AZIMUTH'])
+    rov_coords = get_coordinates(data)["ROVER"]["SOLAR"]
+    assert np.isclose(rov_el, rov_coords["ELEVATION"])
+    assert np.isclose(rov_az, rov_coords["AZIMUTH"])
 
 
 @given(a=quaternions, b=quaternions, c=quaternions)

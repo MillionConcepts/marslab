@@ -9,5 +9,5 @@ def test_random_bandset():
     assert len(bandset.raw.keys()) == len(bandset.metadata)
     assert np.all(bandset.get_band(1) == bandset.raw[1])
     bandset.debayer_if_required(1)
-    bandset.bulk_debayer(bandset.metadata['BAND'].tolist())
+    bandset.bulk_debayer(bandset.metadata["BAND"].tolist())
     assert bandset.debayered == {}

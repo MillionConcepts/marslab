@@ -10,8 +10,11 @@ import numpy as np
 import scipy.io
 from astropy.io import fits
 
-from marslab.compat.mertools import MERSPECT_MSL_COLOR_MAPPINGS, \
-    MERSPECT_M20_COLOR_MAPPINGS, MERSPECT_COLOR_MAPPINGS
+from marslab.compat.mertools import (
+    MERSPECT_MSL_COLOR_MAPPINGS,
+    MERSPECT_M20_COLOR_MAPPINGS,
+    MERSPECT_COLOR_MAPPINGS,
+)
 from marslab.imgops.regions import select_roi_by_ix, make_roi_hdu
 
 
@@ -35,7 +38,7 @@ def is_sel_file(roi_path: Union[str, Path]) -> bool:
                     "right_pos",
                     "sel_file_format_major_version",
                     "sel_file_format_minor_version",
-                    "sel_file_format_date"
+                    "sel_file_format_date",
                 }
             )
             return True

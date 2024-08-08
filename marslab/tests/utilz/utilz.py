@@ -16,7 +16,7 @@ def boring_reals(min_mag: int, max_mag: int):
         allow_nan=False,
         allow_subnormal=False,
         min_value=-(10 ** max_mag),
-        max_value=10 ** max_mag
+        max_value=10 ** max_mag,
     ).filter(lambda x: x == 0 or min_mag <= x <= max_mag)
 
 

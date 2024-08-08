@@ -24,7 +24,7 @@ from typing import (
     NotRequired,
     TYPE_CHECKING,
     TypedDict,
-    Union
+    Union,
 )
 import warnings
 
@@ -60,7 +60,7 @@ LookName = Literal[
     Literal[marslab.spectops.SPECTOP_NAMES],
     Literal[
         "enhanced color", "true color", "dcs", "composite", "nested_composite"
-    ]
+    ],
 ]
 """
 Recognized names of operations for the 'look' step. (If none are appropriate, 
@@ -73,6 +73,7 @@ class MaskFill(TypedDict):
     Format of the optional 'colorfill' value of a sub-instruction in a 'mask'
     step.
     """
+
     # what color should we fill the masked regions with?
     # expressed either as a single 0-255 integer (for a grayscale fill))
     # or a tuple of 3 0-255 integers defining the fill's color as RGB.
@@ -89,6 +90,7 @@ class LayerDef(TypedDict):
     a 'plotter' step. Only relevant if the plotter function itself understands
     it.
     """
+
     layer_ix: int
     image: "np.ndarray"
 
@@ -105,8 +107,8 @@ MaskInstruction = TypedDict(
         # send the mask as an insert to the plotter step?
         "send": NotRequired[bool],
         # pass the mask on to the next function?
-        "pass": NotRequired[bool]
-    }
+        "pass": NotRequired[bool],
+    },
 )
 """
 'mask' steps defined in the DSL cause the generated Look to construct one
@@ -117,6 +119,7 @@ a 'mask' step.
 
 class StepDef(TypedDict):
     """Format of most steps in a Look DSL instruction."""
+
     # explicitly-given Python function
     function: Callable
     # kwargs to pass to `function``
@@ -125,6 +128,7 @@ class StepDef(TypedDict):
 
 class PrefilterDef(StepDef):
     """Format of prefilter step."""
+
     # if True, assumes the first argument is a tuple of arrays, and applies the
     # prefilter function separately to each.
     map: NotRequired[bool]
@@ -139,6 +143,7 @@ class LookInstruction(TypedDict):
     """
     Look DSL instructions are Python Mappings that follow this structure.
     """
+
     # defines a crop on the input image in pixels: (left, right, bottom, top)
     crop: NotRequired[tuple[int, int, int, int]]
     # a first-pass preprocessing step
@@ -155,7 +160,9 @@ class LookInstruction(TypedDict):
     bands: NotRequired[Sequence[Hashable]]
     # TODO: it's a silly hack to have a required 'instructions' key;
     #  'mask' should just be a sequence of MaskInstructions.
-    mask: NotRequired[Mapping[Literal["instructions"], Sequence[MaskInstruction]]]
+    mask: NotRequired[
+        Mapping[Literal["instructions"], Sequence[MaskInstruction]]
+    ]
     limiter: NotRequired[StepDef]
     plotter: NotRequired[StepDef]
     # optional niladic function called on successful execution of the rest
@@ -172,7 +179,7 @@ def look_to_function(look: str) -> Callable:
     and Python functions.
     """
     from marslab.imgops import render
-    
+
     if look in marslab.spectops.SPECTOP_NAMES:
         return partial(
             render.spectop_look, spectop=getattr(marslab.spectops, look)
@@ -230,6 +237,7 @@ def interpret_prefilter_step(inst: PrefilterDef) -> tuple[Callable, dict]:
 def interpret_mask_step(chunk):
     """Interpret a 'mask' step from a Look instruction."""
     from marslab.imgops.masking import extract_masks
+
     return extract_masks, chunk
 
 
@@ -261,7 +269,7 @@ def interpret_instruction_step(
     if step_name == "mask":
         return interpret_mask_step(chunk)
     if step_name == "bang":
-        return triggerize(chunk['function']), chunk.get("params", {}).copy()
+        return triggerize(chunk["function"]), chunk.get("params", {}).copy()
     # If no special case is specified, prep for default Composition behavior.
     # specifying a function is mandatory.
     # specifying bound parameters is not.
@@ -275,7 +283,7 @@ class Look(Composition, ABC):
         metadata: "pd.DataFrame" = None,
         bands: tuple[str] = None,
         special_constants: Collection[Any] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.metadata = metadata
@@ -306,9 +314,9 @@ class Look(Composition, ABC):
         the plotter step. If not, construct an empty one and return it.
         """
         try:
-            return self.inserts['plotter']['layers']
+            return self.inserts["plotter"]["layers"]
         except KeyError:
-            self.add_insert('plotter', 'layers', [])
+            self.add_insert("plotter", "layers", [])
             return self._get_plotter_layers()
 
     def add_underlay(self, underlay: "np.ndarray", layer_ix: int = -1):
@@ -318,10 +326,10 @@ class Look(Composition, ABC):
         """
         if "crop" in self.steps:
             underlay = self.steps["crop"](
-                underlay, **self.inserts.get('crop', {})
+                underlay, **self.inserts.get("crop", {})
             )
         self._get_plotter_layers().append(
-            {'layer_ix': layer_ix, "image": underlay}
+            {"layer_ix": layer_ix, "image": underlay}
         )
 
     @classmethod
@@ -330,7 +338,7 @@ class Look(Composition, ABC):
         instruction: LookInstruction,
         metadata: "pd.DataFrame" = None,
         # TODO: is this cruft?
-        special_constants: Collection[Any] = None
+        special_constants: Collection[Any] = None,
     ):
         """
         Compile an instruction written in the Look DSL into a rendering
@@ -358,8 +366,8 @@ class Look(Composition, ABC):
         if "mask" in steps.keys():
             # add 'splitter'
             # TODO, maybe: implement this at Composition level
-            look.steps['look'] = argstop(look.steps['look'], 2)
-            look.add_send('mask', lambda s: s[2], look._get_plotter_layers())
+            look.steps["look"] = argstop(look.steps["look"], 2)
+            look.add_send("mask", lambda s: s[2], look._get_plotter_layers())
         return look
 
     # TODO: is this excessively baroque; would an internal dispatch be better?
@@ -394,7 +402,7 @@ def save_plainly(
     look: Union["Figure", "Image"],
     filename: Union[str, Path],
     outpath: Union[str, Path],
-    dpi: int = 275
+    dpi: int = 275,
 ):
     """
     Save a PIL Image or matplotlib Figure as simply as possible to

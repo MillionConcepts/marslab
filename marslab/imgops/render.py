@@ -15,7 +15,7 @@ from typing import (
     Sequence,
     TypedDict,
     TYPE_CHECKING,
-    Union
+    Union,
 )
 
 from dustgoggles.structures import separate_by
@@ -32,10 +32,13 @@ from marslab.imgops.imgutils import (
     colorfill_maskedarray,
     eightbit,
     enhance_color,
-    normalize_range
+    normalize_range,
 )
 from marslab.imgops.pltutils import (
-    attach_axis, get_mpl_image, set_colorbar_font, strip_axes
+    attach_axis,
+    get_mpl_image,
+    set_colorbar_font,
+    strip_axes,
 )
 from marslab.spectops import Specvals
 
@@ -147,7 +150,7 @@ def decorrelation_stretch(
 def render_rgb_composite(
     channels: Sequence[np.ndarray],
     *,
-    special_constants: Optional[Union[Collection[float], np.ndarray]] = None
+    special_constants: Optional[Union[Collection[float], np.ndarray]] = None,
 ) -> np.ndarray:
     """
     Composite three input arrays / 'channels' into an 'image', All three arrays
@@ -190,7 +193,7 @@ def spectop_look(
     *,
     spectop: Callable[
         [Specvals, Optional[Specvals], Optional[Specvals]],
-        tuple[np.ndarray, np.ndarray]
+        tuple[np.ndarray, np.ndarray],
     ],
     wavelengths: Optional[Specvals] = None,
 ):
@@ -208,9 +211,11 @@ def spectop_look(
 def rgb_from_bayer(
     image: np.ndarray,
     bayer_pattern: Mapping[str, Sequence[int]],
-    bayer_pixels: Sequence[
-        Union[str, tuple[str]]
-    ] = ("red", ("green_1", "green_2"), "blue"),
+    bayer_pixels: Sequence[Union[str, tuple[str]]] = (
+        "red",
+        ("green_1", "green_2"),
+        "blue",
+    ),
 ) -> np.ndarray:
     """
     assemble m x n x 3 array from specified bayer pixels of passed
@@ -255,9 +260,8 @@ def make_thumbnail(
     """
     makes thumbnails from arrays or matplotlib images or PIL.Images
     """
-    if (
-        filetype is None
-        and not isinstance(file_or_path_or_buffer, (str, Path))
+    if filetype is None and not isinstance(
+        file_or_path_or_buffer, (str, Path)
     ):
         filetype = "jpeg"
     if file_or_path_or_buffer is None:
@@ -287,11 +291,9 @@ def colormapped_plot(
     drop_mask: bool = True,
     alpha: Optional[float] = None,
     layers: Optional[
-        Union[
-            np.ndarray, dict[str, Union[int, np.ndarray]]
-        ]
+        Union[np.ndarray, dict[str, Union[int, np.ndarray]]]
     ] = None,
-    n_ticks=6
+    n_ticks=6,
 ):
     """
     generate a colormapped plot, optionally with colorbar, from 2D array.
@@ -405,21 +407,19 @@ def attach_colorbar(
     cmap: Union[str, mpl.colors.Colormap],
     colorbar_fp: Optional[mpl.font_manager.FontProperties] = None,
     norm: Optional[mpl.colors.Normalize] = None,
-    n_ticks: int = 5
+    n_ticks: int = 5,
 ):
     """
     Attach a colorbar tightly to a matplotlib axis. Is typically much better
     aligned than default colorbar settings.
     """
     cax = attach_axis(ax, size="3%", pad="0.5%")
-    colorbar = plt.colorbar(
-        cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax
-    )
+    colorbar = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax)
     ymin, ymax = colorbar.ax.get_ylim()
     extent = ymax - ymin
     order = int(1 - np.floor(np.log10(extent)))
     precision, success = 0, False
-    print(f'---order {order}---')
+    print(f"---order {order}---")
     while success is False:
         labels, success = _trylabel((ymin, ymax), order, precision, n_ticks)
         precision += 1
@@ -438,7 +438,7 @@ def _duck_alpha(rgb: np.ndarray, a: np.ndarray) -> np.ndarray:
     Performs elementwise multiplication (along axes 0 and 1) between a 3-D
     and 2-D array. Used to apply an alpha channel when merging layers.
     """
-    return np.einsum('ijk,ij->ijk', rgb, a)
+    return np.einsum("ijk,ij->ijk", rgb, a)
 
 
 def merge_layers(lower: np.ndarray, upper: np.ndarray) -> np.ndarray:
@@ -457,9 +457,8 @@ def merge_layers(lower: np.ndarray, upper: np.ndarray) -> np.ndarray:
         alpha_lower = 1 - alpha_upper
     else:
         alpha_lower = np.min([1 - alpha_upper, lower[:, :, 3]], axis=0)
-    rgb = (
-        _duck_alpha(upper[:, :, :3], alpha_upper)
-        + _duck_alpha(lower[:, :, :3], alpha_lower)
+    rgb = _duck_alpha(upper[:, :, :3], alpha_upper) + _duck_alpha(
+        lower[:, :, :3], alpha_lower
     )
     return np.dstack([rgb, alpha_upper + alpha_lower])
 
@@ -469,6 +468,7 @@ class LayerSpec(TypedDict):
     Format for a dict to pass to layer-merging functions if you want to ensure
     an array goes at a specific place in the stack.
     """
+
     image: np.ndarray
     layer_ix: Optional[int]
 
@@ -518,7 +518,7 @@ def render_nested_rgb_composite(
     metadata,
     special_constants=None,
     norm_kwargs=None,
-    **channel_instructions: "LookInstruction"
+    **channel_instructions: "LookInstruction",
 ):
     # TODO: is there a cleaner way to handle this import?
     from marslab.imgops.look import Look

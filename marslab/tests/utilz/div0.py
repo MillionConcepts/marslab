@@ -6,7 +6,7 @@ POINTLESS_WARNINGS = (
     r".*invalid value enc",
     r".*All-NaN",
     r".*are nearly identical",
-    r".*overflow encountered"
+    r".*overflow encountered",
 )
 
 

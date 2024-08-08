@@ -47,10 +47,7 @@ UnitOfAngle = Literal["degrees", "radians", "deg", "rad"]
 
 # TODO: this may be cruft.
 def get_geometry_value(
-    entity_name: str,
-    frame_name: str,
-    axis_name: str,
-    data: pdr.Data
+    entity_name: str, frame_name: str, axis_name: str, data: pdr.Data
 ) -> Union[float, int, str]:
     """
     Fetch the value named `entity_name` for the axis named `axis_name` of the
@@ -58,7 +55,7 @@ def get_geometry_value(
     """
     return get_from(
         data.metaget(f"{frame_name}_DERIVED_GEOMETRY_PARMS"),
-        (f"{entity_name}_{axis_name}", "value")
+        (f"{entity_name}_{axis_name}", "value"),
     )
 
 
@@ -72,7 +69,8 @@ def get_coordinate_system_properties(
     If there is no coordinate system named `frame_name`, returns None.
     """
     syskeys = [
-        k for k in data.metadata.fieldcounts
+        k
+        for k in data.metadata.fieldcounts
         if re.match(f"{frame_name}_COORD(INATE)?_SYSTEM(_PARMS)?$", k)
     ]
     if len(syskeys) == 0:
@@ -83,12 +81,12 @@ def get_coordinate_system_properties(
         "reference_frame": system.get("REFERENCE_COORD_SYSTEM_NAME"),
         "quaternion": np.array(system.get("ORIGIN_ROTATION_QUATERNION")),
         "offset": np.array(system.get("ORIGIN_OFFSET_VECTOR")),
-        "orientation": system.get("POSITIVE_AZIMUTH_DIRECTION")
+        "orientation": system.get("POSITIVE_AZIMUTH_DIRECTION"),
     }
 
 
 def get_coordinate_systems(
-    data: pdr.Data
+    data: pdr.Data,
 ) -> dict[str, dict[str, Union[np.ndarray, str, float]]]:
     """
     Fetch and format information about all VICAR-style coordinate systems
@@ -120,10 +118,7 @@ def _check_unit_of_angle(unit: str) -> None:
 
 
 def cart2sph(
-    x0: ArrayLike,
-    y0: ArrayLike,
-    z0: ArrayLike,
-    unit: UnitOfAngle = "degrees"
+    x0: ArrayLike, y0: ArrayLike, z0: ArrayLike, unit: UnitOfAngle = "degrees"
 ) -> Union[pd.DataFrame, tuple[Real, Real, Real]]:
     """
     Classic Cartesian-to-spherical coordinate representation converter.
@@ -163,7 +158,7 @@ def sph2cart(
     lat: ArrayLike,
     lon: ArrayLike,
     radius: ArrayLike = 1,
-    unit: UnitOfAngle = "degrees"
+    unit: UnitOfAngle = "degrees",
 ) -> Union[pd.DataFrame, tuple[Real, Real, Real]]:
     """
     Classic spherical-to-Cartesian coordinate representation converter. By
@@ -217,10 +212,7 @@ def invert_quaternion(quat: Quaternion) -> Quaternion:
 
 
 def rotate_unit_vector(
-    alt: float,
-    az: float,
-    quat: Quaternion,
-    clockwise: bool = True
+    alt: float, az: float, quat: Quaternion, clockwise: bool = True
 ) -> np.ndarray:
     """
     Apply a rotation expressed as a unit quaternion to a unit vector expressed
@@ -234,22 +226,20 @@ def rotate_unit_vector(
         source_cartesian *= np.array([-1, -1, 1])
     zero_quaternion = np.array([0, *source_cartesian])
     inverse_rotation = invert_quaternion(quat)
-    q_times_0_v = quaternion_multiplication(
-        quat, zero_quaternion
-    )
+    q_times_0_v = quaternion_multiplication(quat, zero_quaternion)
     v_prime = quaternion_multiplication(q_times_0_v, inverse_rotation)
     assert np.isclose(v_prime[0], 0)
     target_cartesian = v_prime[1:]
     if clockwise is True:
         target_cartesian *= np.array([-1, -1, 1])
     # TODO: it's pointless to return the third (radius) element, because
-    #  the result will always be a unit vector. Will probably need to modify 
+    #  the result will always be a unit vector. Will probably need to modify
     #  downstream to make this change.
     return np.array(cart2sph(*target_cartesian))
 
 
 def get_coordinates(
-    data: pdr.Data
+    data: pdr.Data,
 ) -> dict[str, dict[str, dict[Literal["AZIMUTH", "ELEVATION"], float]]]:
     """
     Fetch and organize all VICAR-style azimuth/elevation values mentioned in
@@ -273,11 +263,13 @@ def get_coordinates(
     axes = ("AZIMUTH", "ELEVATION")
     entities = set()
     for axis in axes:
-        entities.update({
-            k.replace(f"_{axis}", "")
-            for k in data.metadata.fieldcounts
-            if k.endswith(f"_{axis}")
-        })
+        entities.update(
+            {
+                k.replace(f"_{axis}", "")
+                for k in data.metadata.fieldcounts
+                if k.endswith(f"_{axis}")
+            }
+        )
     coordinates = NestingDict()
     syskeys = filter(
         lambda k: k.endswith("_GEOMETRY_PARMS"), data.metadata.fieldcounts
@@ -288,7 +280,7 @@ def get_coordinates(
             continue
         record = block.get(f"{entity}_{axis}")
         if record is not None:
-            coordinates[key.split("_")[0]][entity][axis] = record['value']
+            coordinates[key.split("_")[0]][entity][axis] = record["value"]
     return coordinates.todict()
 
 
@@ -323,9 +315,9 @@ def transform_angle(
         quaternion = source_info["quaternion"]
     coord = coordinates[source_frame][entity]
     if target_info is not None:
-        clockwise = "clockwise" in target_info['orientation'].lower()
+        clockwise = "clockwise" in target_info["orientation"].lower()
     else:
-        clockwise = "clockwise" in source_info['orientation'].lower()
+        clockwise = "clockwise" in source_info["orientation"].lower()
     return rotate_unit_vector(
-        coord['ELEVATION'], coord['AZIMUTH'], quaternion, clockwise
+        coord["ELEVATION"], coord["AZIMUTH"], quaternion, clockwise
     )

@@ -15,7 +15,8 @@ from cytoolz import juxt
 
 from marslab.bandset import BandSet
 from marslab.compat.xcam import (
-    DERIVED_CAM_DICT, BAND_TO_BAYER,
+    DERIVED_CAM_DICT,
+    BAND_TO_BAYER,
 )
 from marslab.imgops.debayer import RGGB_PATTERN
 from marslab.imgops.loaders import pdr_load
@@ -122,8 +123,10 @@ class ZcamBandSet(BandSet):
         references to additional bands of R0 / L0 image files (that don't
         exist in raw bayer images).
         """
-        if tuple(self.precached.values())[0].metaget(
-                'BAYER_METHOD') == 'RAW_BAYER':
+        if (
+            tuple(self.precached.values())[0].metaget("BAYER_METHOD")
+            == "RAW_BAYER"
+        ):
             return False
         if fix_metadata:
             self.metadata["BAYER_PIXEL"] = None

@@ -38,7 +38,7 @@ def test_look():
             ]
         },
         "plotter": {"function": render.simple_figure},
-        "bang": {"function": lambda: list_.append(1)}
+        "bang": {"function": lambda: list_.append(1)},
     }
     look = Look.compile_from_instruction(instruction)
     r = np.random.random((128, 128))
@@ -46,5 +46,5 @@ def test_look():
     b = np.random.random((128, 128)) * 100
     fig = look.execute((r, g, b))
     assert isinstance(fig, Figure)
-    assert look.inserts['plotter']['layers'][0][0].shape == (126, 126, 4)
+    assert look.inserts["plotter"]["layers"][0][0].shape == (126, 126, 4)
     assert list_ == [1]

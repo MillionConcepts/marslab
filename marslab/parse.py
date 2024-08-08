@@ -15,7 +15,6 @@ PType = Literal["IMAGE", "MOSAIC"]
 """Defined M20 imaging product subtypes currently supported by this module."""
 
 
-
 def suite(inst):
     raise NotImplementedError
 
