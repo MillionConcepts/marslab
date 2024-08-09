@@ -364,7 +364,7 @@ def _tformat(number: float, order: int, precision: int):
         formatted = ("{:." + str(precision) + "e}").format(number)
         # remove pointless leading 0 in exponent
         return "".join([formatted[:-2], formatted[-1]])
-    if order + precision < 0:
+    if order + precision == 0:
         return str(round(number))
     return str(number)
 
@@ -377,7 +377,7 @@ def _trylabel(
     Attempts to find label positions that maximize coverage while minimizing
     required decimal places.
     """
-    # 100 is arbitrary, basically the resolution of the solver
+    # 100 is arbitrary -- basically the resolution of the solver
     grid = np.linspace(bounds[0], bounds[1], n_ticks * 100)
     labels = sorted(
         {_tformat(round(n, order + precision), order, precision) for n in grid}
@@ -387,11 +387,12 @@ def _trylabel(
     inbounds = (positions <= grid.max()) & (positions >= grid.min())
     labels, positions = labels[inbounds], positions[inbounds]
     labels, positions = labels[np.argsort(positions)], np.sort(positions)
-    # NOTE: 20% range cutoff here is totally arbitrary
+    # NOTE: 15% range cutoff here is totally arbitrary
+    extent = (grid.max() - grid.min())
     if (
         positions.size < n_ticks
-        or abs((positions.max() - grid.max()) / grid.max()) > 0.2
-        or abs((positions.min() - grid.min()) / grid.min()) > 0.2
+        or abs((positions.max() - grid.max()) / extent) > 0.15
+        or abs((positions.min() - grid.min()) / extent) > 0.15
     ):
         # noinspection PyTypeChecker
         return labels, False
