@@ -419,7 +419,6 @@ def attach_colorbar(
     extent = ymax - ymin
     order = int(1 - np.floor(np.log10(extent)))
     precision, success = 0, False
-    print(f"---order {order}---")
     while success is False:
         labels, success = _trylabel((ymin, ymax), order, precision, n_ticks)
         precision += 1
