@@ -3,25 +3,22 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.9
-  - numpy
-  - pandas
-  - matplotlib
-  - git
-  - pip
-  - python-Levenshtein
-  - scipy
-  - fs
-  - pathos
+  - astropy
   - cytoolz
   - dustgoggles
-  - python-dateutil
-  - pdr
-  - astropy
-  - sympy
-  - more-itertools
   - fast-histogram
-  - scikit-image
+  - matplotlib
+  - more-itertools
+  - numpy
   - opencv
-  # optional dependency for testing
+  - pandas
+  - pathos
+  - pdr
+  - pip
+  - python-dateutil
+  - scikit-image
+  - scipy
+  - sympy
+  # optional dependencies for testing, included by default
   - pytest
   - hypothesis
