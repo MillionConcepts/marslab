@@ -4,7 +4,13 @@ generic image-loading functions for multispectral ops
 import sys
 from pathlib import Path
 from typing import (
-    Optional, TYPE_CHECKING, Union, Callable, Sequence, Collection, Mapping
+    Optional,
+    TYPE_CHECKING,
+    Union,
+    Callable,
+    Sequence,
+    Collection,
+    Mapping,
 )
 
 from dustgoggles.structures import enumerate_as_mapping
@@ -166,7 +172,7 @@ def pil_load(
     path: str,
     metadata: Optional["pd.DataFrame"] = None,
     bands: Optional[Sequence[Union[str, int]]] = None,
-    _precached=None
+    _precached=None,
 ) -> dict[Union[int, str], np.ndarray]:
     from PIL import Image
 
@@ -179,7 +185,7 @@ def pil_load_rgb(
     path: Union[str, Path],
     metadata: Optional["pd.DataFrame"] = None,
     _bands=None,
-    _precached=None
+    _precached=None,
 ) -> dict[Union[int, str], np.ndarray]:
     from PIL import Image
 
@@ -244,7 +250,7 @@ def manage_pdr_scaling(
     float_dtype: type,
     object_name: str,
     preserve_constants: Optional[Sequence[float]],
-    do_scale: bool
+    do_scale: bool,
 ) -> np.ndarray:
     if do_scale is False:
         return data[object_name]

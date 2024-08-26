@@ -1,16 +1,27 @@
-"""utilities for watching worker pools"""
+"""
+Utilities for watching worker pools. Can be used for progress updates, logging,
+etc.
+
+TODO, maybe: this is more special-purpose than originally intended and quite
+ possibly shouldn't be in marslab at all.
+"""
+import os
 from collections.abc import Callable, Mapping
 import logging
+from multiprocessing import active_children, Pool
 import time
 from types import MappingProxyType
 from typing import Optional, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from multiprocessing import Pool
     from pathos.multiprocessing import ProcessPool
 
 
 class ChangeReporter:
+    """
+    Simple class for monitoring changes in a dict or other mapping.
+    """
+
     def __init__(self, mapping: Mapping):
         self.state = MappingProxyType(mapping)
         self.reference = mapping
@@ -32,15 +43,20 @@ class ChangeReporter:
 
 
 def watch_pool(
-    result_map,
+    result_map: Mapping,
     interval: float = 0.1,
     callback: Optional[Callable] = None,
-):
+    timeout: Optional[float] = None,
+) -> Mapping:
+    start = time.time()
     in_readiness = {
         task: result.ready() for task, result in result_map.items()
     }
     task_report = ChangeReporter(in_readiness)
     while not all(in_readiness.values()):
+        if timeout is not None:
+            if time.time() - start > timeout:
+                raise TimeoutError
         in_readiness = {
             task_ix: result.ready() for task_ix, result in result_map.items()
         }
@@ -72,12 +88,19 @@ def wait_for_it(
     callback: Optional[Callable] = None,
     interval: float = 0.1,
     as_dict: bool = False,
+    timeout: Optional[float] = None,
 ) -> Union[dict, list]:
     if (callback is None) and (log is not None):
         callback = simple_log_callback(log, message)
     pool.close()
     if results is not None:
-        watch_pool(results, interval, callback)
+        try:
+            watch_pool(results, interval, callback, timeout)
+        except TimeoutError:
+            pool.terminate()
+            for c in active_children():
+                os.kill(c.pid, 30)
+            raise TimeoutError("Pool timed out")
     pool.join()
     if as_dict:
         return {key: result.get() for key, result in results.items()}

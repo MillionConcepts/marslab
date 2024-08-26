@@ -29,7 +29,7 @@ def setup_m3_bandset_metadata(file_path):
     metadata["IX"] = np.array(range(len(metadata["WAVELENGTH"])))
     # 'channel' or 'channel #' in mission nomenclature
     metadata["BAND"] = metadata["IX"] + 1
-    metadata['PATH'] = file_path
+    metadata["PATH"] = file_path
     return metadata
 
 

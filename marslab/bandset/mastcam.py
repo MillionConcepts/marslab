@@ -20,7 +20,7 @@ def parse_mcam_fn(mcam_fn):
         "EYE": filename[5],
         "SEQ_ID": f"mcam{int(filename[6:12])}",
         "CAL": filename[26:30],
-        "FILETYPE": filename[22:25]
+        "FILETYPE": filename[22:25],
     }
 
 
@@ -50,7 +50,7 @@ def parse_mcam_files(file_paths):
 def setup_mcam_bandset_metadata(metadata):
     if "FILTER" in metadata.columns:
         metadata = metadata.drop(
-            metadata.loc[metadata.FILTER.isin(('L7', 'R7'))].index
+            metadata.loc[metadata.FILTER.isin(("L7", "R7"))].index
         )
         metadata["BAND"] = metadata["FILTER"]
         metadata.drop("FILTER", axis=1)
@@ -80,7 +80,7 @@ def setup_mcam_bandset_metadata(metadata):
     metadata["BAYER_PIXEL"] = pd.Series(BAND_TO_BAYER["MCAM"])[
         metadata["BAND"]
     ]
-    metadata.loc[metadata['FILETYPE'] != 'C00', 'BAYER_PIXEL'] = None
+    metadata.loc[metadata["FILETYPE"] != "C00", "BAYER_PIXEL"] = None
     return metadata.reset_index(drop=True)
 
 

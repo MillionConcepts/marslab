@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="marslab",
-    version="0.9.12",
+    version="0.9.22",
     url="https://github.com/millionconcepts/marslab.git",
     author="Million Concepts",
     author_email="chase@millionconcepts.com",
@@ -17,15 +17,13 @@ setup(
     packages=find_packages(),
     python_requires=">=3.9",
     install_requires=[
-        "numpy",
-        "scipy",
-        "dustgoggles",
-        "fs",
-        "clize",
-        "pandas",
-        "more-itertools",
-        "pathos",
         "cytoolz",
+        "dustgoggles",
+        "more-itertools",
+        "numpy",
+        "pandas",
+        "pathos",
+        "scipy",
     ],
     extras_require={
         "pdr_load": ["pdr"],

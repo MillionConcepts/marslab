@@ -86,28 +86,35 @@ def prefigure(func, title=None):
         if title is not None:
             plt.title(title)
         return result
+
     return prefigured
 
 
 def clipshow_factory(title=None):
     return Composition(
-        {'clip': std_clip, 'plot': prefigure(plt.imshow, title)},
-        inserts={'clip': {'sigma': 1}}
+        {"clip": std_clip, "plot": prefigure(plt.imshow, title)},
+        inserts={"clip": {"sigma": 1}},
     )
 
 
-def gridshow(arrays, kwarg_seq=None, *imshow_args, strip=True, **imshow_kwargs):
+def gridshow(
+    arrays, kwarg_seq=None, *imshow_args, strip=True, **imshow_kwargs
+):
     size = ceil(sqrt(len(arrays)))
     fig, grid = plt.subplots(size, size)
     kwarg_seq = [] if kwarg_seq is None else kwarg_seq
     kwarg_seq = [
-        {} if i + 1 > len(kwarg_seq) else kwarg_seq[i] for i in range(len(arrays))
+        {} if i + 1 > len(kwarg_seq) else kwarg_seq[i]
+        for i in range(len(arrays))
     ]
     for cell_ix in range(len(arrays)):
         x, y = (cell_ix % size, (cell_ix // size) % size)
         cell = grid[x][y]
         cell.imshow(
-            arrays[cell_ix], *imshow_args, **kwarg_seq[cell_ix], **imshow_kwargs
+            arrays[cell_ix],
+            *imshow_args,
+            **kwarg_seq[cell_ix],
+            **imshow_kwargs
         )
     if strip is True:
         tuple(map(strip_axes, grid.ravel()))

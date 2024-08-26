@@ -2,8 +2,12 @@ from functools import reduce
 
 from cytoolz import keyfilter, keymap
 from dustgoggles.composition import Composition
-from marslab.imgops.imgutils import nanmask, ravel_valid, cut_annulus, \
-    cut_rectangle
+from marslab.imgops.imgutils import (
+    nanmask,
+    ravel_valid,
+    cut_annulus,
+    cut_rectangle,
+)
 import numpy as np
 from scipy.fft import fft2, fftshift, ifft2, ifftshift
 from scipy import stats
@@ -41,12 +45,12 @@ def bandfilter(array, bounds, region, component):
     return space(annulus.data, component)
 
 
-def bandcut(array, bounds, component='real'):
-    return bandfilter(array, bounds, 'outer', component)
+def bandcut(array, bounds, component="real"):
+    return bandfilter(array, bounds, "outer", component)
 
 
-def bandpass(array, bounds, component='real'):
-    return bandfilter(array, bounds, 'inner', component)
+def bandpass(array, bounds, component="real"):
+    return bandfilter(array, bounds, "inner", component)
 
 
 def boxfilter(array, bounds, region, component, center=True):
@@ -90,7 +94,7 @@ def autocompare(image, copy=True):
         "std": np.std(image),
         "mean": np.mean(image),
         "std_abs": np.std(abs_image),
-        "mean_abs": np.mean(abs_image)
+        "mean_abs": np.mean(abs_image),
     }
     edge_results = []
     canvas = nanmask(image, copy)
@@ -105,7 +109,7 @@ def autocompare(image, copy=True):
     sobel_values = np.abs(ravel_valid(sobel(image)))
     statistics |= {
         "sobel_mean_abs": np.mean(sobel_values),
-        "sobel_std_abs": np.std(sobel_values)
+        "sobel_std_abs": np.std(sobel_values),
     }
     return statistics
 
@@ -124,30 +128,30 @@ def scale(array):
 
 def unpack_scipy_describe(result):
     return {
-        'mean': result.mean,
-        'n': result.nobs,
-        'min': result.minmax[0],
-        'max': result.minmax[1],
-        'range': result.minmax[1] - result.minmax[0],
-        'skew': result.skewness,
-        'kurtosis': result.kurtosis,
-        'var': result.variance,
+        "mean": result.mean,
+        "n": result.nobs,
+        "min": result.minmax[0],
+        "max": result.minmax[1],
+        "range": result.minmax[1] - result.minmax[0],
+        "skew": result.skewness,
+        "kurtosis": result.kurtosis,
+        "var": result.variance,
     }
 
 
 # noinspection PyTypeChecker
 def rvdescribe(array, rv=True):
-    result = {'shape': array.shape}
+    result = {"shape": array.shape}
     if rv is True:
         array = ravel_valid(array)
     result |= unpack_scipy_describe(stats.describe(array))
-    result['std'] = np.sqrt(result['var'])
-    if result['min'] >= 0:
+    result["std"] = np.sqrt(result["var"])
+    if result["min"] >= 0:
         return result
     absresult = unpack_scipy_describe(stats.describe(np.abs(array)))
     absresult = keyfilter(lambda k: k != "n", absresult)
     absresult = keymap(lambda x: f"{x}_abs", absresult)
-    absresult['std_abs'] = np.sqrt(absresult['var_abs'])
+    absresult["std_abs"] = np.sqrt(absresult["var_abs"])
     return result | absresult
 
 
@@ -155,9 +159,9 @@ def gradient_stats(
     array, sample_distance=1, get_mag=True, return_components=True
 ):
     dy, dx = np.gradient(array, sample_distance)
-    component_dict = {'dy': dy, 'dx': dx}
+    component_dict = {"dy": dy, "dx": dx}
     if get_mag is True:
-        component_dict['norm'] = dy ** 2 + dx ** 2
+        component_dict["norm"] = dy ** 2 + dx ** 2
     stat_dict = {k: rvdescribe(v) for k, v in component_dict.items()}
     if return_components is True:
         return stat_dict, component_dict
@@ -191,7 +195,7 @@ def fhplot(
     bin_positions = np.linspace(*vrange, bins + 1)
     if ax is None:
         ax = plt.gca()
-    mpl_kwargs = {'histtype': 'step'} | mpl_kwargs
+    mpl_kwargs = {"histtype": "step"} | mpl_kwargs
     ax.hist(bin_positions[:-1], bin_positions, weights=counts, **mpl_kwargs)
     if return_counts is True:
         return ax, counts, bin_positions

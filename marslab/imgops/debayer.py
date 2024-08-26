@@ -109,7 +109,7 @@ def mask_bayer_pixels(
     pixel: Union[str, Sequence[str]],
     pattern: Mapping[str, tuple] = None,
     masks: Mapping[str, tuple] = None,
-    default = 0,
+    default=0,
     **_kwargs  # TODO: hacky!
 ) -> np.ndarray:
     """

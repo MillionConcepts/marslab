@@ -13,8 +13,8 @@ def roi_position(roi):
     return {
         "y": y,
         "x": x,
-        "r": np.sqrt(y**2 + x**2),
-        "theta": np.arctan2(y, x)
+        "r": np.sqrt(y ** 2 + x ** 2),
+        "theta": np.arctan2(y, x),
     }
 
 

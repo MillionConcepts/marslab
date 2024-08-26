@@ -41,7 +41,7 @@ def ink(
     maximum=3,
     edge_thresholds=(60, 110),
     erosion=3,
-    input_stretch=(10, 1)
+    input_stretch=(10, 1),
 ):
     mean = maybe_filter(
         _get_flat_mean(images, None, normalize=input_stretch), median
@@ -212,9 +212,7 @@ def trim_infiltrate_pixels(mask, row=0, trim_depth=10, depth_sigma=7):
     return np.logical_and(mask, depth_mask)
 
 
-def refit_mask(
-    mask, clear=True, trim=False, trim_depth=10, depth_sigma=7
-):
+def refit_mask(mask, clear=True, trim=False, trim_depth=10, depth_sigma=7):
     if (clear is False) and (trim is False):
         return mask
     w_col_indices, w_row_ix = widest_part(floodfill_mask(mask))
@@ -223,9 +221,7 @@ def refit_mask(
             mask, w_row_ix, w_col_indices[0], w_col_indices[-1]
         )
     if trim is True:
-        mask = trim_infiltrate_pixels(
-            mask, w_row_ix, trim_depth, depth_sigma
-        )
+        mask = trim_infiltrate_pixels(mask, w_row_ix, trim_depth, depth_sigma)
     return pluck_label(mask)
 
 
@@ -272,7 +268,7 @@ def skymask(
     trim_params=MappingProxyType({"trim": False}),
     clear=True,
     colorblock=False,
-    respect_mask=False
+    respect_mask=False,
 ):
     flat_mean = _get_flat_mean(
         arrays, input_mask_dilation, normalize=input_stretch

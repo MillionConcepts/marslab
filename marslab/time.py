@@ -13,12 +13,7 @@ from typing import Callable, Union
 
 import dateutil.parser as dtp
 
-TZS = {
-    'EST': -18000,
-    'CST': -21600,
-    'MST': -25200,
-    'PST': -28800
-}
+TZS = {"EST": -18000, "CST": -21600, "MST": -25200, "PST": -28800}
 
 LEAP_SECOND_THRESHOLDS = [
     dt.datetime(1972, 6, 30, tzinfo=dt.timezone.utc),
@@ -47,7 +42,7 @@ LEAP_SECOND_THRESHOLDS = [
     dt.datetime(2008, 12, 31, tzinfo=dt.timezone.utc),
     dt.datetime(2012, 6, 30, tzinfo=dt.timezone.utc),
     dt.datetime(2015, 6, 30, tzinfo=dt.timezone.utc),
-    dt.datetime(2016, 12, 31, tzinfo=dt.timezone.utc)
+    dt.datetime(2016, 12, 31, tzinfo=dt.timezone.utc),
 ]
 
 
@@ -56,13 +51,15 @@ LEAP_SECOND_THRESHOLDS = [
 def dt_to_jd(time: dt.datetime) -> float:
     y, m, d = time.year, time.month, time.day
     h = time.hour + time.minute / 60 + time.second / 3600
-    return sum([
-        367 * y,
-        -1 * floor(7 * (y + floor((m + 9) / 12)) / 4),
-        -1 * floor(3 * (floor((y + (m - 9) / 7) / 100) + 1) / 4),
-        floor(275 * m / 9) + d + 1721028.5,
-        h / 24
-    ])
+    return sum(
+        [
+            367 * y,
+            -1 * floor(7 * (y + floor((m + 9) / 12)) / 4),
+            -1 * floor(3 * (floor((y + (m - 9) / 7) / 100) + 1) / 4),
+            floor(275 * m / 9) + d + 1721028.5,
+            h / 24,
+        ]
+    )
 
 
 def utc_to_tt_offset(time: dt.datetime) -> float:
@@ -116,8 +113,10 @@ def hours_to_24h_time(hours: float) -> str:
     given in fractional hours to a string in ISO time format
     """
     return (
-            dt.datetime(2001, 1, 2) + dt.timedelta(hours=hours)
-    ).time().isoformat()
+        (dt.datetime(2001, 1, 2) + dt.timedelta(hours=hours))
+        .time()
+        .isoformat()
+    )
 
 
 def mean_anomaly(dt_j2000: float) -> float:
@@ -132,25 +131,25 @@ def fictitious_mean_sun(dt_j2000: float) -> float:
 
 # table 5 (truncated)
 PERTURBATION_TABLE = [
-    [1.23918377e-04, 2.23530000e+00, 8.62349730e-01],
-    [9.94837674e-05, 2.75430000e+00, 2.93517256e+00],
-    [6.80678408e-05, 1.11770000e+00, 3.34818728e+00],
-    [6.45771823e-05, 1.57866000e+01, 3.79364766e-01],
-    [3.66519143e-05, 2.13540000e+00, 2.74086506e-01],
-    [3.49065850e-05, 2.46940000e+00, 1.66727813e+00],
-    [3.14159265e-05, 3.28493000e+01, 8.56869396e-01]
+    [1.23918377e-04, 2.23530000e00, 8.62349730e-01],
+    [9.94837674e-05, 2.75430000e00, 2.93517256e00],
+    [6.80678408e-05, 1.11770000e00, 3.34818728e00],
+    [6.45771823e-05, 1.57866000e01, 3.79364766e-01],
+    [3.66519143e-05, 2.13540000e00, 2.74086506e-01],
+    [3.49065850e-05, 2.46940000e00, 1.66727813e00],
+    [3.14159265e-05, 3.28493000e01, 8.56869396e-01],
 ]
 
 
-def perturbation_factory(dt_j2000: float) -> Callable[[float, float, float], float]:
+def perturbation_factory(
+    dt_j2000: float,
+) -> Callable[[float, float, float], float]:
     """
     generate the interior of the perturbation summation
     """
 
     def calculate_perturbation(a: float, tau: float, phi: float) -> float:
-        return a * cos(
-            0.01720241889326163 * dt_j2000 / tau + phi
-        )
+        return a * cos(0.01720241889326163 * dt_j2000 / tau + phi)
 
     return calculate_perturbation
 
@@ -164,13 +163,16 @@ def mean_terms(dt_j2000: float) -> float:
     """terms of eq. 19"""
     # writing it in this silly way for readability
     alpha_m = mean_anomaly(dt_j2000)
-    return sum([
-        (0.1865931503307138 + 5.235987755982988e-09 * dt_j2000) * sin(alpha_m),
-        0.010873401239924672 * sin(2 * alpha_m),
-        0.0008726646259971648 * sin(3 * alpha_m),
-        8.726646259971648e-05 * sin(4 * alpha_m),
-        8.726646259971648e-06 * sin(5 * alpha_m)
-    ])
+    return sum(
+        [
+            (0.1865931503307138 + 5.235987755982988e-09 * dt_j2000)
+            * sin(alpha_m),
+            0.010873401239924672 * sin(2 * alpha_m),
+            0.0008726646259971648 * sin(3 * alpha_m),
+            8.726646259971648e-05 * sin(4 * alpha_m),
+            8.726646259971648e-06 * sin(5 * alpha_m),
+        ]
+    )
 
 
 # areocentric solar longitude
@@ -180,13 +182,15 @@ def l_s(dt_j2000: float) -> float:
 
 def eot(dt_j2000: float) -> float:
     l_s_0 = l_s(dt_j2000)
-    return sum([
-        0.04993386989955777 * sin(2 * l_s_0),
-        -0.001239183768915974 * sin(4 * l_s_0),
-        3.490658503988659e-05 * sin(6 * l_s_0),
-        fictitious_mean_sun(dt_j2000),
-        -1 * l_s_0
-    ])
+    return sum(
+        [
+            0.04993386989955777 * sin(2 * l_s_0),
+            -0.001239183768915974 * sin(4 * l_s_0),
+            3.490658503988659e-05 * sin(6 * l_s_0),
+            fictitious_mean_sun(dt_j2000),
+            -1 * l_s_0,
+        ]
+    )
 
 
 def mst_hours(julian_day: float) -> float:
@@ -199,44 +203,30 @@ def lmst_hours(julian_day: float, west_longitude_degrees: float) -> float:
 
 
 def ltst_hours(julian_day: float, west_longitude_degrees: float) -> float:
-    hours = lmst_hours(julian_day, west_longitude_degrees) + \
-            r2d(eot((to_j2000_jd(julian_day)))) / 15
+    hours = (
+        lmst_hours(julian_day, west_longitude_degrees)
+        + r2d(eot((to_j2000_jd(julian_day)))) / 15
+    )
     return hours
 
 
 def mst(time: Union[str, None, dt.datetime] = None) -> str:
     jd_tt = to_jd_tt(time)
-    return hours_to_24h_time(
-        mst_hours(
-            jd_tt
-        )
-    )
+    return hours_to_24h_time(mst_hours(jd_tt))
 
 
 def lmst(
-        time: Union[str, None, dt.datetime] = None,
-        west_longitude: float = 0
+    time: Union[str, None, dt.datetime] = None, west_longitude: float = 0
 ) -> str:
     jd_tt = to_jd_tt(time)
-    return hours_to_24h_time(
-        lmst_hours(
-            jd_tt,
-            west_longitude
-        )
-    )
+    return hours_to_24h_time(lmst_hours(jd_tt, west_longitude))
 
 
 def ltst(
-        time: Union[str, None, dt.datetime] = None,
-        west_longitude: float = 0
+    time: Union[str, None, dt.datetime] = None, west_longitude: float = 0
 ) -> str:
     jd_tt = to_jd_tt(time)
-    return hours_to_24h_time(
-        ltst_hours(
-            jd_tt,
-            west_longitude
-        )
-    )
+    return hours_to_24h_time(ltst_hours(jd_tt, west_longitude))
 
 
 mission_to_wlon = {
@@ -247,13 +237,10 @@ mission_to_wlon = {
     "AMT": 0,
 }
 
-time_type_to_function = {
-    'ltst': ltst,
-    'lmst': lmst
-}
+time_type_to_function = {"ltst": ltst, "lmst": lmst}
 
 
-def drawclock(stdscr, mission: str = 'M2020', time_type='ltst'):
+def drawclock(stdscr, mission: str = "M2020", time_type="ltst"):
     k = 0
     curses.curs_set(0)
     stdscr.nodelay(True)
@@ -261,10 +248,11 @@ def drawclock(stdscr, mission: str = 'M2020', time_type='ltst'):
     stdscr.refresh()
     stdscr.nodelay(True)
     time_function = time_type_to_function[time_type]
-    while (k != ord('q')):
+    while k != ord("q"):
         stdscr.addstr(
-            1, 1,
-            f'{mission} - {time_function(west_longitude=mission_to_wlon[mission])[:8]}'
+            1,
+            1,
+            f"{mission} - {time_function(west_longitude=mission_to_wlon[mission])[:8]}",
         )
         stdscr.refresh()
         curses.delay_output(100)
@@ -273,4 +261,3 @@ def drawclock(stdscr, mission: str = 'M2020', time_type='ltst'):
     curses.nocbreak()
     stdscr.keypad(False)
     curses.echo()
-

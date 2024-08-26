@@ -1,4 +1,4 @@
-from collections import ChainMap
+import warnings
 
 import numpy as np
 from hypothesis import given, strategies as st, assume
@@ -6,6 +6,7 @@ from hypothesis.extra.numpy import arrays, array_shapes
 
 from marslab.imgops.render import decorrelation_stretch
 from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
+from marslab.tests.utilz.div0 import divide_by_zero
 
 
 @given(
@@ -18,12 +19,13 @@ from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
             elements={
                 "allow_nan": False,
                 "allow_infinity": False,
-                "min_value": -1E8,
-                "max_value": 1E8,
+                "min_value": -1e8,
+                "max_value": 1e8,
             },
             fill=st.nothing(),
         ),
-        min_size=2,
+        min_size=3,
+        max_size=3,
     ),
     contrast_stretch=st.one_of(
         st.none(),
@@ -32,37 +34,26 @@ from marslab.tests.utilz.utilz import positive_finite_floats, finite_floats
             st.floats(min_value=0, max_value=100), max_size=2, min_size=2
         ),
     ),
-    special_constants=st.one_of(
-        st.none(),
-        st.lists(finite_floats),
-        st.sets(finite_floats),
-        st.frozensets(finite_floats),
-        st.dictionaries(keys=finite_floats, values=finite_floats),
-        st.dictionaries(keys=finite_floats, values=st.none()).map(dict.keys),
-        st.dictionaries(keys=st.integers(), values=finite_floats).map(
-            dict.values
-        ),
-        st.dictionaries(keys=finite_floats, values=finite_floats).map(
-            ChainMap
-        ),
-    ),
+    special_constants=st.one_of(st.none(), st.lists(finite_floats)),
     sigma=st.one_of(st.none(), positive_finite_floats),
 )
 def test_fuzz_decorrelation_stretch_nice(
     channels, contrast_stretch, special_constants, sigma
 ):
-    # try:
-    # single-valued arrays have undefined covariance
-    assume(all([not len(np.unique(channel)) == 1 for channel in channels]))
-    # ridiculously large inputs relative to dtype we expect to cause errors
-    assume(all([not np.isinf(np.std(channel)) for channel in channels]))
-
-    decorrelation_stretch(
-        channels=channels,
-        contrast_stretch=contrast_stretch,
-        special_constants=special_constants,
-        sigma=sigma,
-    )
+    with warnings.catch_warnings():
+        divide_by_zero()
+        # single-valued arrays have undefined covariance
+        assume(all([not len(np.unique(channel)) == 1 for channel in channels]))
+        # ridiculously large inputs relative to dtype we expect to cause errors
+        assume(all([not np.isinf(np.std(channel)) for channel in channels]))
+        if special_constants is not None:
+            channels = [
+                np.ma.masked_where(np.isin(c, special_constants), c)
+                for c in channels
+            ]
+        decorrelation_stretch(
+            channels=channels, contrast_stretch=contrast_stretch, sigma=sigma
+        )
 
 
 # @hset(max_examples=500, verbosity=Verbosity.verbose)

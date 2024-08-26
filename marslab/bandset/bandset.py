@@ -7,7 +7,7 @@ import logging
 import os
 from collections.abc import Mapping, Callable, Collection, Sequence
 from pathlib import Path
-from typing import Optional, Union, MutableMapping, Any
+from typing import Optional, Union, MutableMapping, Any, Hashable
 
 # note: ignore complaints from static analyzers about this import. dill
 # performs pickling magick at import.
@@ -17,8 +17,12 @@ import numpy as np
 import pandas as pd
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import absolutely_destroy, mapfilter, \
-    get_all_bands, get_all_bands_from_all
+from marslab.imgops.imgutils import (
+    absolutely_destroy,
+    mapfilter,
+    get_all_bands,
+    get_all_bands_from_all,
+)
 from marslab.imgops.look import Look, save_plainly
 from marslab.poolutils import wait_for_it
 
@@ -40,7 +44,7 @@ class BandSet:
         name: str = None,
         threads: Mapping = None,
         raw: MutableMapping = None,
-        special_constants: Collection[Any] = None
+        special_constants: Collection[Any] = None,
     ):
         """
         :param metadata: dataframe containing at least "PATH", "BAND", "IX,
@@ -142,7 +146,8 @@ class BandSet:
             results = []
             for path, band_df in chunked_by_file:
                 results.append(
-                    self.load_method(path, band_df, bands, self.precached))
+                    self.load_method(path, band_df, bands, self.precached)
+                )
                 log.info("loaded " + path)
         else:
             results = {}
@@ -218,7 +223,7 @@ class BandSet:
             row_column=self.bayer_info["row_column"],
         )
 
-    def bulk_debayer(self, bands: Collection[str]):
+    def bulk_debayer(self, bands: Collection[Hashable]):
         """
         debayer all bands according to spec in self.metadata and
         self.bayer_info, asynchronously / multithreaded if
@@ -295,6 +300,7 @@ class BandSet:
         self,
         instructions: Collection[Mapping],
         autoload: bool = True,
+        timeout: Optional[float] = None,
     ):
         # load images and filter instruction set for unavailable bands
         available_instructions = self.prep_look_set(instructions, autoload)
@@ -319,7 +325,7 @@ class BandSet:
                 op_images = {
                     channel: [
                         self.get_band(band).copy()
-                        for band in instruction['params'][channel]["bands"]
+                        for band in instruction["params"][channel]["bands"]
                     ]
                     for channel in ("red", "green", "blue")
                 }
@@ -330,10 +336,10 @@ class BandSet:
             pipeline = Look.compile_from_instruction(
                 instruction,
                 metadata=self.metadata,
-                special_constants=self.special_constants
+                special_constants=self.special_constants,
             )
             if "underlay" in instruction.keys():
-                underlay = instruction['underlay']['band']
+                underlay = instruction["underlay"]["band"]
                 if isinstance(underlay, int):
                     pipeline.add_underlay(op_images[underlay])
                 else:
@@ -349,7 +355,12 @@ class BandSet:
                 log.info("generated " + op_name)
         if pool is not None:
             look_cache = wait_for_it(
-                pool, look_cache, log, message="generated ", as_dict=True
+                pool,
+                look_cache,
+                log,
+                message="generated ",
+                as_dict=True,
+                timeout=timeout,
             )
             pool.terminate()
         self.looks |= look_cache
@@ -432,5 +443,3 @@ class ImageBands(BandSet):
         metadata["BAND"] = self.raw.keys()
         metadata["IX"] = self.raw.keys()
         metadata["PATH"] = path
-
-

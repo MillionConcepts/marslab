@@ -1,9 +1,11 @@
+import warnings
 from functools import reduce
 from operator import and_
 
 import numpy as np
 
 from marslab.imgops.regions import count_rois_on_image
+from marslab.tests.utilz.div0 import divide_by_zero
 
 rng = np.random.default_rng()
 
@@ -22,9 +24,11 @@ def test_with_trivial_case():
     rois[2][length // 2 :, 0 : length // 2] = True
     rois[3][length // 2 :, length // 2 :] = True
     blackwhite[length // 2 + 1, 0] = -9999
-    counts = count_rois_on_image(
-        rois.values(), rois.keys(), blackwhite, special_constants=[-9999]
-    )
+    with warnings.catch_warnings():
+        divide_by_zero()
+        counts = count_rois_on_image(
+            rois.values(), rois.keys(), blackwhite, special_constants=[-9999]
+        )
     assert reduce(
         and_,
         (

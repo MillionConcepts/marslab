@@ -1,39 +1,58 @@
 """
 inline rendering functions for look pipelines. can also be called on their own.
 """
-import io
-from collections import defaultdict
-from functools import reduce
-from itertools import repeat, chain
-from typing import Union, Optional, Sequence
+from __future__ import annotations
 
+import io
+from functools import reduce
+from itertools import chain, repeat
+from pathlib import Path
+from typing import (
+    Callable,
+    Collection,
+    Mapping,
+    Optional,
+    Sequence,
+    TypedDict,
+    TYPE_CHECKING,
+    Union,
+)
+
+from dustgoggles.structures import separate_by
 import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.font_manager import FontProperties
 from PIL import Image
-from dustgoggles.structures import separate_by
-from numpy.typing import ArrayLike
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
-from marslab.imgops.imgutils import normalize_range, eightbit, enhance_color, \
-    clip_unmasked, colorfill_maskedarray
+from marslab.imgops.imgutils import (
+    colorfill_maskedarray,
+    eightbit,
+    enhance_color,
+    normalize_range,
+)
 from marslab.imgops.pltutils import (
-    set_colorbar_font,
-    get_mpl_image,
     attach_axis,
+    get_mpl_image,
+    set_colorbar_font,
     strip_axes,
 )
+from marslab.spectops import Specvals
+
+if TYPE_CHECKING:
+    from marslab.imgops.look import LookInstruction
 
 
 def decorrelation_stretch(
     channels: Sequence[np.ndarray],
-    flat_mask=None,
+    flat_mask: Optional[np.ndarray] = None,
     contrast_stretch: Optional[Union[Sequence[float], float]] = None,
     sigma: Optional[float] = 1,
-    mask_fill_tone=None,
-):
+    mask_fill_tone: Optional[Union[float, tuple[float, float, float]]] = None,
+) -> np.ndarray:
     """
     decorrelation stretch of passed array on last axis of array. see
     Gillespie et al. 1986, etc., etc.
@@ -128,11 +147,24 @@ def decorrelation_stretch(
 # TODO: I think masking in this is too late and we should be doing it up
 #  front, adding an optional median fill step for cases where we might have
 #  undesirable white pixels everywhere or whatever.
-def render_rgb_composite(channels, *, special_constants=None):
+def render_rgb_composite(
+    channels: Sequence[np.ndarray],
+    *,
+    special_constants: Optional[Union[Collection[float], np.ndarray]] = None,
+) -> np.ndarray:
     """
-    render a composited image from three input channels. this is a good basis
-    for producing both "true-color" and "enhanced-color" images from most
-    filter sets.
+    Composite three input arrays / 'channels' into an 'image', All three arrays
+    must have the same shape, and for best results, should be of the same
+    dtype. The returned 'image' has shape (*input_shape, 3).
+
+    Although not limited to this application, this function is intended
+    primarily to merge 2D arrays representing red, green, and blue image
+    channels into an array that can be easily rendered as an RGB image.
+
+    This function is a good basis for producing both "true-color" and
+    "enhanced-color" images from most filter sets, and can also be used for
+    stranger purposes.
+
     TODO: following is no longer true. move this as an interpretation step to
       Look.compile_from_instruction()
     this assumes normalization as a default option because you're presumably
@@ -140,6 +172,7 @@ def render_rgb_composite(channels, *, special_constants=None):
     arbitrary colormap (although aren't they all?).
     """
     assert len(channels) == 3
+    assert len(set(map(lambda arr: arr.shape, channels))) == 1
     if isinstance(channels[0], np.ma.MaskedArray):
         composed = np.ma.dstack(channels)
     else:
@@ -155,11 +188,14 @@ def render_rgb_composite(channels, *, special_constants=None):
 
 
 def spectop_look(
-    images,
-    flat_mask=None,
+    images: Union[Specvals],
+    flat_mask: Optional[np.ndarray] = None,
     *,
-    spectop=None,
-    wavelengths=None,
+    spectop: Callable[
+        [Specvals, Optional[Specvals], Optional[Specvals]],
+        tuple[np.ndarray, np.ndarray],
+    ],
+    wavelengths: Optional[Specvals] = None,
 ):
     look = spectop(images, None, wavelengths)[0]
     if flat_mask is None:
@@ -173,10 +209,14 @@ def spectop_look(
 
 # TODO: cruft, this should be handled by BandSet -- but is it?
 def rgb_from_bayer(
-    image,
-    bayer_pattern,
-    bayer_pixels=("red", ("green_1", "green_2"), "blue"),
-):
+    image: np.ndarray,
+    bayer_pattern: Mapping[str, Sequence[int]],
+    bayer_pixels: Sequence[Union[str, tuple[str]]] = (
+        "red",
+        ("green_1", "green_2"),
+        "blue",
+    ),
+) -> np.ndarray:
     """
     assemble m x n x 3 array from specified bayer pixels of passed
     single m x n array or 3 m x n arrays
@@ -212,18 +252,20 @@ def rgb_from_bayer(
 
 
 def make_thumbnail(
-    image_array,
-    thumbnail_size=(256, 256),
-    file_or_path_or_buffer=None,
-    filetype=None,
-):
+    image_array: np.ndarray,
+    thumbnail_size: tuple[int, int] = (256, 256),
+    file_or_path_or_buffer: Optional[Union[str, Path, io.BytesIO]] = None,
+    filetype: Optional[str] = None,
+) -> Union[str, Path, io.BytesIO]:
     """
     makes thumbnails from arrays or matplotlib images or PIL.Images
     """
+    if filetype is None and not isinstance(
+        file_or_path_or_buffer, (str, Path)
+    ):
+        filetype = "jpeg"
     if file_or_path_or_buffer is None:
         file_or_path_or_buffer = io.BytesIO()
-    if filetype is None:
-        filetype = "jpeg"
     if isinstance(image_array, mpl.figure.Figure):
         thumbnail_array = get_mpl_image(image_array).convert("RGB")
     elif isinstance(image_array, np.ndarray):
@@ -240,16 +282,18 @@ def make_thumbnail(
 #  becoming hacky -- maybe solve it more consistently with masks?:
 def colormapped_plot(
     array: np.ndarray,
-    cmap=None,
-    render_colorbar=False,
-    no_ticks=True,
-    colorbar_fp=None,
-    special_constants=None,
-    mask_fill_color=0.45,
-    drop_mask=True,
-    alpha=None,
-    layers=None,
-    n_ticks=3
+    cmap: Union[str, mpl.colors.Colormap, None] = None,
+    render_colorbar: bool = False,
+    no_ticks: bool = True,
+    colorbar_fp: Optional[FontProperties] = None,
+    special_constants: Optional[Sequence[Union[int, float]]] = None,
+    mask_fill_color: Union[float, tuple[float, float, float]] = 0.45,
+    drop_mask: bool = True,
+    alpha: Optional[float] = None,
+    layers: Optional[
+        Union[np.ndarray, dict[str, Union[int, np.ndarray]]]
+    ] = None,
+    n_ticks=6,
 ):
     """
     generate a colormapped plot, optionally with colorbar, from 2D array.
@@ -287,11 +331,14 @@ def colormapped_plot(
         if drop_mask is True:
             array = array.data
     if isinstance(cmap, str):
-        cmap = cm.get_cmap(cmap)
-    if cmap is None:
-        cmap = cm.get_cmap("Greys_r")
+        cmap = plt.get_cmap(cmap)
+    elif cmap is None:
+        cmap = plt.get_cmap("Greys_r")
+    elif not isinstance(cmap, plt.Colormap):
+        raise TypeError(f"`cmap` must be NoneType, str, or Colormap")
     mapped = cmap(norm(array))
     if isinstance(array, np.ma.MaskedArray) and (drop_mask is False):
+        # noinspection PyTupleItemAssignment,PyUnresolvedReferences
         mapped[array.mask] = mask_fill_color
     del array
     if alpha is not None:
@@ -310,58 +357,99 @@ def colormapped_plot(
     return fig
 
 
-def _tformat(number, order, precision):
+def _tformat(number: float, order: int, precision: int):
+    """Standard compact tick label rounder / formatter."""
     if order > 2:
+        # use exponential notation when value range is < 0.1
         formatted = ("{:." + str(precision) + "e}").format(number)
+        # remove pointless leading 0 in exponent
         return "".join([formatted[:-2], formatted[-1]])
-    if order + precision < 0:
-        return round(number)
-    return round(number, order + precision)
+    if order + precision == 0:
+        return str(round(number))
+    return str(number)
 
 
-def attach_colorbar(ax, cmap, colorbar_fp, norm, n_ticks=3):
-    cax = attach_axis(ax, size="3%", pad="0.5%")
-    colorbar = plt.colorbar(
-        cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax
+# TODO, maybe: this only works well with certain sorts of value ranges.
+def _trylabel(
+    bounds: tuple[float, float], order: int, precision: int, n_ticks: int
+) -> tuple[Union[np.ndarray, list[str]], bool]:
+    """
+    Attempts to find label positions that maximize coverage while minimizing
+    required decimal places.
+    """
+    # 100 is arbitrary -- basically the resolution of the solver
+    grid = np.linspace(bounds[0], bounds[1], n_ticks * 100)
+    labels = sorted(
+        {_tformat(round(n, order + precision), order, precision) for n in grid}
     )
+    labels = np.array(labels)
+    positions = labels.astype(float)
+    inbounds = (positions <= grid.max()) & (positions >= grid.min())
+    labels, positions = labels[inbounds], positions[inbounds]
+    labels, positions = labels[np.argsort(positions)], np.sort(positions)
+    # NOTE: 15% range cutoff here is totally arbitrary
+    extent = (grid.max() - grid.min())
+    if (
+        positions.size < n_ticks
+        or abs((positions.max() - grid.max()) / extent) > 0.15
+        or abs((positions.min() - grid.min()) / extent) > 0.15
+    ):
+        # noinspection PyTypeChecker
+        return labels, False
+    outlabels = []
+    for ideal in np.linspace(bounds[0], bounds[1], n_ticks):
+        outlabels.append(labels[np.argmin(abs(positions - ideal))])
+    # noinspection PyTypeChecker
+    return outlabels, True
+
+
+def attach_colorbar(
+    ax: plt.Axes,
+    cmap: Union[str, mpl.colors.Colormap],
+    colorbar_fp: Optional[mpl.font_manager.FontProperties] = None,
+    norm: Optional[mpl.colors.Normalize] = None,
+    n_ticks: int = 5,
+):
+    """
+    Attach a colorbar tightly to a matplotlib axis. Is typically much better
+    aligned than default colorbar settings.
+    """
+    cax = attach_axis(ax, size="3%", pad="0.5%")
+    colorbar = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax)
     ymin, ymax = colorbar.ax.get_ylim()
     extent = ymax - ymin
-    gauge = np.linspace(ymin, ymax, n_ticks * 4 - 1)
     order = int(1 - np.floor(np.log10(extent)))
-    precision, ticks, labels = 0, [], []
-    while len(labels) < (n_ticks - 1):
-        ticks, labels = _trylabel(order, precision, gauge, n_ticks)
+    precision, success = 0, False
+    while success is False:
+        labels, success = _trylabel((ymin, ymax), order, precision, n_ticks)
         precision += 1
-    colorbar.ax.set_yticks(ticks)
+        if precision > 10:
+            raise ValueError("Tick placement not terminating; check range.")
+    # noinspection PyTypeChecker
+    # noinspection PyUnboundLocalVariable
+    colorbar.ax.set_yticks(list(map(float, labels)))
     colorbar.ax.set_yticklabels(labels)
     if colorbar_fp:
         set_colorbar_font(colorbar, colorbar_fp)
 
 
-def _trylabel(order, precision, gauge, n_ticks):
-    ticks, labels = [], []
-    for ix, t in enumerate(gauge):
-        formatted = _tformat(t, order, precision)
-        if formatted in labels:
-            continue
-        ticks.append(t)
-        labels.append(formatted)
-    if len(labels) > n_ticks:
-        indices = []
-        n_ticks = 10
-        needed = n_ticks
-        for cutoff in np.percentile(ticks, np.linspace(0, 100, needed)):
-            indices.append(np.argmin(np.abs(ticks - cutoff)))
-        ticks = [ticks[ix] for ix in indices]
-        labels = [labels[ix] for ix in indices]
-    return ticks, labels
+def _duck_alpha(rgb: np.ndarray, a: np.ndarray) -> np.ndarray:
+    """
+    Performs elementwise multiplication (along axes 0 and 1) between a 3-D
+    and 2-D array. Used to apply an alpha channel when merging layers.
+    """
+    return np.einsum("ijk,ij->ijk", rgb, a)
 
 
-def _duck_alpha(rgb, a):
-    return np.einsum('ijk,ij->ijk', rgb, a)
-
-
-def merge_layers(lower, upper):
+def merge_layers(lower: np.ndarray, upper: np.ndarray) -> np.ndarray:
+    """
+    "Flatten" two arrays representing image layers. Each array must be 3D,
+    and each must have shape (n, m, 3) or (n, m, 4). If the last axis is of
+    length 4, the last "band" of the array is interpreted as an alpha channel.
+    Returns an array of shape (n, m, 4) unless `upper` is of shape (n, m, 3),
+    in which case it just returns `upper` -- it has no transparency so fully
+    covers up `lower` in the flattened image.
+    """
     if upper.shape[2] == 3:
         return upper
     alpha_upper = upper[:, :, 3]
@@ -369,14 +457,25 @@ def merge_layers(lower, upper):
         alpha_lower = 1 - alpha_upper
     else:
         alpha_lower = np.min([1 - alpha_upper, lower[:, :, 3]], axis=0)
-    rgb = (
-        _duck_alpha(upper[:, :, :3], alpha_upper)
-        + _duck_alpha(lower[:, :, :3], alpha_lower)
+    rgb = _duck_alpha(upper[:, :, :3], alpha_upper) + _duck_alpha(
+        lower[:, :, :3], alpha_lower
     )
     return np.dstack([rgb, alpha_upper + alpha_lower])
 
 
-def flatten_into_figure(layers, **imshow_kwargs):
+class LayerSpec(TypedDict):
+    """
+    Format for a dict to pass to layer-merging functions if you want to ensure
+    an array goes at a specific place in the stack.
+    """
+
+    image: np.ndarray
+    layer_ix: Optional[int]
+
+
+def flatten_into_figure(
+    layers: Sequence[Union[LayerSpec, np.ndarray]], **imshow_kwargs
+) -> tuple[plt.Figure, plt.Axes]:
     seq, single = separate_by(layers, lambda l: isinstance(l, (tuple, list)))
     layers = list(chain.from_iterable(seq)) + single
     dicts, arrays = separate_by(layers, lambda l: isinstance(l, dict))
@@ -386,7 +485,7 @@ def flatten_into_figure(layers, **imshow_kwargs):
     images = []
     for image in list(map(lambda d: d.get("image"), dicts)) + arrays:
         if len(image.shape) != 3:
-            image = cm.get_cmap("Greys_r")(image)
+            image = plt.get_cmap("Greys_r")(image)
         images.append(image)
     fig, ax = plt.subplots()
     ax.imshow(reduce(merge_layers, images), **imshow_kwargs)
@@ -394,14 +493,12 @@ def flatten_into_figure(layers, **imshow_kwargs):
 
 
 def simple_figure(
-    image: Union[ArrayLike, Image.Image],
-    zero_mask=True,
-    layers=None,
+    image: Union[np.ndarray, Image.Image],
+    zero_mask: bool = True,
+    layers: Optional[Sequence[np.ndarray]] = None,
     **imshow_kwargs,
 ) -> mpl.figure.Figure:
-    """
-    wrap an array + optional layers up in a matplotlib subplot
-    """
+    """Wrap an array + optional layers up in a simple matplotlib figure."""
     if (zero_mask is True) and isinstance(image, np.ma.MaskedArray):
         image = np.ma.filled(image, 0)
     if layers is not None:
@@ -416,12 +513,12 @@ def simple_figure(
 
 
 def render_nested_rgb_composite(
-    channel_images,
+    channel_images: Mapping[str, np.ndarray],
     *,
     metadata,
     special_constants=None,
     norm_kwargs=None,
-    **channel_instructions,
+    **channel_instructions: "LookInstruction",
 ):
     # TODO: is there a cleaner way to handle this import?
     from marslab.imgops.look import Look
