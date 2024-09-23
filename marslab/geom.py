@@ -327,12 +327,12 @@ def transform_angle(
         target_info is not None
         and target_info["reference_frame"].startswith(source_frame_id)
     ):
-        quaternion = invert_quaternion(target_info['quaternion'])
+        quaternion = target_info['quaternion']
     elif (
         source_info is not None
         and source_info['reference_frame'].startswith(target_frame_id)
     ):
-        quaternion = target_info['quaternion']
+        quaternion = invert_quaternion(source_info['quaternion'])
     else:
         raise NoQuaternionError(
             f"No quaternion available to transform {source_frame_id} to "

@@ -21,9 +21,7 @@ def test_vicarlike_coordinate_system_transformations():
     # frame to SITE frame
     site_alt, site_az, _ = transform_angle("ROVER", "SITE", "SOLAR", data)
     # get the quaternion that will rotate SITE frame to ROVER frame
-    reverse_rot = invert_quaternion(
-        get_coordinate_system_properties("ROVER", data)["quaternion"]
-    )
+    reverse_rot = get_coordinate_system_properties("ROVER", data)["quaternion"]
     # rotate the computed solar direction vector back to ROVER frame
     rov_el, rov_az, _ = rotate_unit_vector(site_alt, site_az, reverse_rot)
     # compare it to vector explicitly given in the label
