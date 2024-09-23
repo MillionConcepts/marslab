@@ -36,7 +36,9 @@ def setup_m3_bandset_metadata(file_path):
 class M3BandSet(BandSet):
     def __init__(self, file_path, rois=None, threads=None):
         metadata = setup_m3_bandset_metadata(file_path)
-        load_method = partial(pdr_load, preserve_constants=-999.0)
+        load_method = partial(
+            pdr_load, preserve_constants=[-999.0], object_name='PRIMARY'
+        )
         super().__init__(
             metadata=metadata,
             load_method=load_method,
