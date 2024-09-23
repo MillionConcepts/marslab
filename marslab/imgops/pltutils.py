@@ -3,6 +3,8 @@ utility functions for dealing with matplotlib
 """
 import io
 from math import ceil, sqrt
+from pathlib import Path
+from typing import Optional, Sequence, Union
 
 from dustgoggles.composition import Composition
 from matplotlib.colorbar import Colorbar
@@ -10,9 +12,11 @@ from matplotlib.axes import Subplot
 from matplotlib.figure import Figure
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy as np
 import PIL.Image
+from skimage.transform import rescale
 
-from marslab.imgops.imgutils import std_clip
+from marslab.imgops.imgutils import std_clip, eightbit
 
 
 def get_mpl_image(fig: Figure):
@@ -24,6 +28,18 @@ def get_mpl_image(fig: Figure):
     buffer = io.BytesIO()
     fig.savefig(buffer, bbox_inches="tight", pad_inches=0)
     return PIL.Image.open(buffer)
+
+
+def fig2arr(fig: plt.Figure) -> np.ndarray:
+    """naively convert a matplotlib figure to a numpy array"""
+    fig.canvas.draw()
+    # noinspection PyUnresolvedReferences
+    raveled = np.frombuffer(
+        fig.canvas.buffer_rgba(), dtype=np.uint8
+    )
+    return raveled.reshape(
+        fig.canvas.get_width_height()[::-1] + (4,)
+    )[:, :, :3]
 
 
 def remove_ticks(ax):
