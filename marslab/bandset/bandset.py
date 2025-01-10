@@ -314,7 +314,8 @@ class BandSet:
             op_name = instruction.get("name")
             if op_name is None:
                 op_name = (
-                    instruction["look"] + "_" + "_".join(instruction["bands"])
+                    f"{instruction['look']}_" 
+                    + "_".join(map(str, instruction["bands"]))
                 )
             if instruction["look"] not in ["nested_composite"]:
                 op_images = [

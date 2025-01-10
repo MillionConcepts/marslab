@@ -137,20 +137,19 @@ def cart2sph(
            however, mix scalars in as you please.)
     """
     _check_unit_of_angle(unit)
+    was_array = reduce(
+        or_, map(is_it(pd.DataFrame, np.ndarray, pd.Series), [x0, y0, z0])
+    )
+    x0, y0, z0 = map(lambda v: np.array([v]), (x0, y0, z0))
     radius = np.sqrt(x0 ** 2 + y0 ** 2 + z0 ** 2)
-    if x0 != 0:
-        longitude = np.arctan2(y0, x0)
-    else:
-        longitude = np.pi / 2
+    longitude = np.where(x0 != 0, np.arctan2(y0, x0), np.pi/2)
     longitude = longitude % (np.pi * 2)
     latitude = np.arcsin(z0 / np.sqrt(x0 ** 2 + y0 ** 2 + z0 ** 2))
     if unit in {"degrees", "deg"}:
         latitude = np.degrees(latitude)
         longitude = np.degrees(longitude)
-    if reduce(
-        or_, map(is_it(pd.DataFrame, np.ndarray, pd.Series), [x0, y0, z0])
-    ):
-        return pd.DataFrame({"lat": latitude, "lon": longitude, "r": radius})
+    if was_array is False:
+        return latitude[0], longitude[0], radius[0]
     return latitude, longitude, radius
 
 
@@ -284,8 +283,25 @@ def get_coordinates(
     return coordinates.todict()
 
 
+class NoQuaternionError(KeyError):
+    pass
+
+
+def pick_reference_frame(frame_name, systems):
+    matches = {
+        k: v for k, v in systems.items()
+        if k.startswith(frame_name)
+    }
+    if len(matches) > 1:
+        raise ValueError("Ambiguous frame reference.")
+    elif len(matches) == 0:
+        return None, None
+    ref_id, ref_frame = tuple(matches.keys())[0], tuple(matches.values())[0]
+    return ref_id, ref_frame, ref_id == frame_name
+
+
 def transform_angle(
-    source_frame: str, target_frame: str, entity: str, data: pdr.Data
+    source_frame_id: str, target_frame_id: str, entity: str, data: pdr.Data
 ) -> np.ndarray:
     """
     Transform an angle described in VICAR-style notation in a PDS3 label from
@@ -305,15 +321,25 @@ def transform_angle(
     """
     coordinates = get_coordinates(data)
     systems = get_coordinate_systems(data)
-    source_info = systems.get(source_frame)
-    target_info = systems.get(target_frame)
-    if source_info is None:
-        if not target_info["reference_frame"].startswith(source_frame):
-            raise ValueError("can't directly convert between these frames.")
-        quaternion = invert_quaternion(target_info["quaternion"])
+    source_info = systems.get(source_frame_id)
+    target_info = systems.get(target_frame_id)
+    if (
+        target_info is not None
+        and target_info["reference_frame"].startswith(source_frame_id)
+    ):
+        quaternion = target_info['quaternion']
+    elif (
+        source_info is not None
+        and source_info['reference_frame'].startswith(target_frame_id)
+    ):
+        quaternion = invert_quaternion(source_info['quaternion'])
     else:
-        quaternion = source_info["quaternion"]
-    coord = coordinates[source_frame][entity]
+        raise NoQuaternionError(
+            f"No quaternion available to transform {source_frame_id} to "
+            f"{target_frame_id}."
+        )
+    # TODO: permit automated recursive identification of transforms
+    coord = coordinates[source_frame_id][entity]
     if target_info is not None:
         clockwise = "clockwise" in target_info["orientation"].lower()
     else:

@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.font_manager import FontProperties
 from PIL import Image
+from skimage.transform import rescale
 
 from marslab.imgops.debayer import make_bayer, debayer_upsample
 from marslab.imgops.imgutils import (
@@ -537,3 +538,31 @@ def render_nested_rgb_composite(
     return render_rgb_composite(
         norm_channels, special_constants=special_constants
     )
+
+
+def make_gif(
+    arrays: Sequence[Union[np.ndarray, plt.Figure]],
+    fn: Union[str, Path],
+    scaling: Optional[float] = None,
+    loop: int = 0,
+    duration: int = 100
+) -> Path:
+    from marslab.imgops.pltutils import fig2arr
+
+    images = []
+    for arr in arrays:
+        arr = fig2arr(arr) if isinstance(arr, plt.Figure) else arr
+        if scaling is not None:
+            arr = rescale(arr, scaling, channel_axis=2)
+        if arr.dtype.char != 'B':
+            arr = eightbit(arr)
+        images.append(Image.fromarray(arr))
+    images[0].save(
+        fn,
+        'gif',
+        save_all=True,
+        append_images=images[1:],
+        loop=loop,
+        duration=duration
+    )
+    return Path(fn)
