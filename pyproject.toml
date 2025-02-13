@@ -1,0 +1,64 @@
+# pyproject.toml documentation for reference:
+#   https://packaging.python.org/en/latest/
+#   https://setuptools.pypa.io/en/latest/userguide/
+
+[project]
+name        = "marslab"
+version     = "0.9.23"
+description = "Utilities for working with remote sensing observational data of planetary bodies."
+readme      = "README.md"
+license     = { file = "LICENSE.md" }
+
+authors     = [
+    { name = "Michael St. Clair", email = "mstclair@millionconcepts.com" },
+    { name = "Chase Million",     email = "chase@millionconcepts.com"    },
+    { name = "Sierra Brown",      email = "sierra@millionconcepts.com"   }
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+
+requires-python = ">=3.9"
+dependencies = [
+    "cytoolz",
+    "dustgoggles",
+    "more-itertools",
+    "numpy",
+    "pandas",
+    "pathos",
+    "scipy"
+]
+
+[project.optional-dependencies]
+pdr_load       = ["pdr"]
+tests          = ["pytest", "hypothesis"]
+render         = ["pillow", "matplotlib"]
+notebooks      = ["jupyter"]
+regions        = ["astropy"]
+time           = ["sympy", "python-dateutil"]
+geom           = ["pdr"]
+strict_reshape = ["sympy"]
+histograms     = ["fast-histogram"]
+masking        = ["scikit-image", "opencv"]
+
+[project.urls]
+Repository = "https://github.com/MillionConcepts/marslab"
+
+[build-system]
+requires = ["setuptools >= 64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["marslab*"]
+namespaces = false
+
+# Recommended for new projects by pytest manual.
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib"
+]
