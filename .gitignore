@@ -139,3 +139,6 @@ test_output/*
 # development
 *scratch.py
 *scratch.ipynb
+
+# macOS specific
+*DS_Store
