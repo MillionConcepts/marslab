@@ -4,7 +4,7 @@
 
 [project]
 name        = "marslab"
-version     = "0.9.23"
+version     = "0.9.24"
 description = "Utilities for working with remote sensing observational data of planetary bodies."
 readme      = "README.md"
 license     = { file = "LICENSE.md" }
