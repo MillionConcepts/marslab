@@ -22,12 +22,60 @@ from more_itertools import windowed
 WAVELENGTH_TO_FILTER = {
     "CCAM": {
         400: "400",
+        433: "433",
         440: "440",
+        500: "500",
         535: "535",
         600: "600",
         670: "670",
         750: "750",
+        800: "800",
         840: "840",
+    },
+    "SCAM": {
+        400: "400",
+        430: "430",
+        433: "433",
+        440: "440",
+        460: "460",
+        545: "545",
+        600: "600",
+        650: "650",
+        670: "670",
+        700: "700",
+        750: "750",
+        800: "800",
+        840: "840",
+        1330: "1330",
+        1350: "1350",
+        1390: "1390",
+        1400: "1400",
+        1420: "1420",
+        1467: "1467",
+        1560: "1560",
+        1690: "1690",
+        1750: "1750",
+        1800: "1800",
+        1815: "1815",
+        1820: "1820",
+        1930: "1930",
+        2100: "2100",
+        2150: "2150",
+        2165: "2165",
+        2200: "2200",
+        2210: "2210",
+        2230: "2230",
+        2250: "2250",
+        2280: "2280",
+        2320: "2320",
+        2330: "2330",
+        2340: "2340",
+        2350: "2350",
+        2390: "2390",
+        2450: "2450",
+        2500: "2500",
+        2530: "2530",
+        2570: "2570",
     },
     "ZCAM": {
         "L": {
@@ -121,7 +169,7 @@ def make_xcam_filter_dict(abbreviation):
     """
     form filter: wavelength dictionary for mastcam-family instruments
     """
-    if abbreviation == "CCAM":
+    if abbreviation == "CCAM" or abbreviation == "SCAM":
         return {
             name: wavelength
             for wavelength, name in sorted(
@@ -194,7 +242,7 @@ def make_canonical_averaged_filters(abbreviation):
     return {filt: caf[filt] for filt in sorted(caf, key=lambda x: caf[x])}
 
 
-XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM"]
+XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM", "SCAM"]
 DERIVED_CAM_DICT = {
     abbrev: {
         "filters": make_xcam_filter_dict(abbrev),
@@ -423,6 +471,7 @@ BAND_TO_BAYER = {
         "R0R": None,
     },
 }
+
 
 # TODO: de-vendor downstream (moved up to dustgoggles)
 def integerize(df):
