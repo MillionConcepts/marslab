@@ -540,47 +540,63 @@ def render_nested_rgb_composite(
     )
 
 
-# TODO: 
-# - add monocolor option
-# - test/improve compatibility with mastcamz's multispectral mosaics
 def stereo_anaglyph(
-    channel_inputs: Mapping[str, np.ndarray], # expect 6 input bands (ordered: left r,g,b, then right r,g,b)
+    channel_inputs: Mapping[str, np.ndarray],
     *,
-    special_constants=None,
+    norm_kwargs=None,
+    **channel_instructions: "LookInstruction",
 ):
-    """ """
-    anaglyph_constants = {
-        'mono': [
-            [ 0.299, 0.587, 0.114, 0, 0, 0, 0, 0, 0 ], 
-            [ 0, 0, 0, 0.299, 0.587, 0.114, 0.299, 0.587, 0.114 ]
-        ],
-        'color': [
-            [ 1, 0, 0, 0, 0, 0, 0, 0, 0 ], 
-            [ 0, 0, 0, 0, 1, 0, 0, 0, 1 ]
-        ],
+    """ 
+    channel_inputs: a dict with three items (the keys are 'red', 'green', 
+    'blue'), where each item is a list of two ndarrays (the first array is 
+    treated as the left eye input in the calculations below, and the second 
+    array is treated as the right eye input)
+
+    The formulas and constants used to calculate values for rendered_channels
+    can be found at: https://www.3dtv.at/knowhow/anaglyphcomparison_en.aspx
+    """
+    constants_matrix = {
+        'mono': [[ 0.299, 0.587, 0.114, 0, 0, 0, 0, 0, 0 ], 
+                 [ 0, 0, 0, 0.299, 0.587, 0.114, 0.299, 0.587, 0.114 ]],
+        'color': [[ 1, 0, 0, 0, 0, 0, 0, 0, 0 ], 
+                  [ 0, 0, 0, 0, 1, 0, 0, 0, 1 ]],
     }
-    red = (channel_inputs[0]*anaglyph_constants['color'][0][0] + 
-           channel_inputs[1]*anaglyph_constants['color'][0][1] + 
-           channel_inputs[2]*anaglyph_constants['color'][0][2] + 
-           channel_inputs[3]*anaglyph_constants['color'][1][0] + 
-           channel_inputs[4]*anaglyph_constants['color'][1][1] + 
-           channel_inputs[5]*anaglyph_constants['color'][1][2])
-    green = (channel_inputs[0]*anaglyph_constants['color'][0][3] + 
-             channel_inputs[1]*anaglyph_constants['color'][0][4] + 
-             channel_inputs[2]*anaglyph_constants['color'][0][5] + 
-             channel_inputs[3]*anaglyph_constants['color'][1][3] + 
-             channel_inputs[4]*anaglyph_constants['color'][1][4] + 
-             channel_inputs[5]*anaglyph_constants['color'][1][5])
-    blue = (channel_inputs[0]*anaglyph_constants['color'][0][6] + 
-            channel_inputs[1]*anaglyph_constants['color'][0][7] + 
-            channel_inputs[2]*anaglyph_constants['color'][0][8] + 
-            channel_inputs[3]*anaglyph_constants['color'][1][6] + 
-            channel_inputs[4]*anaglyph_constants['color'][1][7] + 
-            channel_inputs[5]*anaglyph_constants['color'][1][8])
-    channels = [red, green, blue]
-    return render_rgb_composite(
-        channels, special_constants=special_constants
+    if 'anaglyph_type' in channel_instructions:
+        color = channel_instructions['anaglyph_type']
+    else: 
+        color = 'color'
+
+    rendered_channels = {}
+    rendered_channels['red'] = (
+        channel_inputs['red'][0] * constants_matrix[color][0][0] + 
+        channel_inputs['green'][0] * constants_matrix[color][0][1] + 
+        channel_inputs['blue'][0] * constants_matrix[color][0][2] + 
+        channel_inputs['red'][1] * constants_matrix[color][1][0] + 
+        channel_inputs['green'][1] * constants_matrix[color][1][1] + 
+        channel_inputs['blue'][1] * constants_matrix[color][1][2]
     )
+    rendered_channels['green'] = (
+        channel_inputs['red'][0] * constants_matrix[color][0][3] + 
+        channel_inputs['green'][0] * constants_matrix[color][0][4] + 
+        channel_inputs['blue'][0] * constants_matrix[color][0][5] + 
+        channel_inputs['red'][1] * constants_matrix[color][1][3] + 
+        channel_inputs['green'][1] * constants_matrix[color][1][4] + 
+        channel_inputs['blue'][1] * constants_matrix[color][1][5]
+    )
+    rendered_channels['blue'] = (
+        channel_inputs['red'][0] * constants_matrix[color][0][6] + 
+        channel_inputs['green'][0] * constants_matrix[color][0][7] + 
+        channel_inputs['blue'][0] * constants_matrix[color][0][8] + 
+        channel_inputs['red'][1] * constants_matrix[color][1][6] + 
+        channel_inputs['green'][1] * constants_matrix[color][1][7] + 
+        channel_inputs['blue'][1] * constants_matrix[color][1][8]
+    )
+    norm_kwargs = {} if norm_kwargs is None else norm_kwargs
+    norm_channels = [
+        normalize_range(rendered_channels[name], **norm_kwargs)
+        for name in ("red", "green", "blue")
+    ]
+    return render_rgb_composite(norm_channels)
 
 
 def make_gif(

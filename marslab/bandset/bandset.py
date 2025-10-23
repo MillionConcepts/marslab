@@ -317,7 +317,9 @@ class BandSet:
                     f"{instruction['look']}_" 
                     + "_".join(map(str, instruction["bands"]))
                 )
-            if instruction["look"] not in ["nested_composite"]:
+            if instruction["look"] not in [
+                "nested_composite", "stereo anaglyph"
+            ]:
                 op_images = [
                     self.get_band(band).copy() for band in instruction["bands"]
                 ]
