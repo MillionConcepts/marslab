@@ -59,7 +59,8 @@ order of these names is syntactic; do not rearrange the elements of STEP_NAMES.
 LookName = Literal[
     Literal[marslab.spectops.SPECTOP_NAMES],
     Literal[
-        "enhanced color", "true color", "dcs", "composite", "nested_composite"
+        "enhanced color", "true color", "dcs", "composite", "nested_composite", 
+        "stereo anaglyph"
     ],
 ]
 """
@@ -190,6 +191,8 @@ def look_to_function(look: str) -> Callable:
         return render.decorrelation_stretch
     elif look == "nested_composite":
         return render.render_nested_rgb_composite
+    elif look == "stereo anaglyph":
+        return render.stereo_anaglyph
     raise ValueError("unknown look operation " + look)
 
 

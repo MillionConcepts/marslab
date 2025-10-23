@@ -540,6 +540,49 @@ def render_nested_rgb_composite(
     )
 
 
+# TODO: 
+# - add monocolor option
+# - test/improve compatibility with mastcamz's multispectral mosaics
+def stereo_anaglyph(
+    channel_inputs: Mapping[str, np.ndarray], # expect 6 input bands (ordered: left r,g,b, then right r,g,b)
+    *,
+    special_constants=None,
+):
+    """ """
+    anaglyph_constants = {
+        'mono': [
+            [ 0.299, 0.587, 0.114, 0, 0, 0, 0, 0, 0 ], 
+            [ 0, 0, 0, 0.299, 0.587, 0.114, 0.299, 0.587, 0.114 ]
+        ],
+        'color': [
+            [ 1, 0, 0, 0, 0, 0, 0, 0, 0 ], 
+            [ 0, 0, 0, 0, 1, 0, 0, 0, 1 ]
+        ],
+    }
+    red = (channel_inputs[0]*anaglyph_constants['color'][0][0] + 
+           channel_inputs[1]*anaglyph_constants['color'][0][1] + 
+           channel_inputs[2]*anaglyph_constants['color'][0][2] + 
+           channel_inputs[3]*anaglyph_constants['color'][1][0] + 
+           channel_inputs[4]*anaglyph_constants['color'][1][1] + 
+           channel_inputs[5]*anaglyph_constants['color'][1][2])
+    green = (channel_inputs[0]*anaglyph_constants['color'][0][3] + 
+             channel_inputs[1]*anaglyph_constants['color'][0][4] + 
+             channel_inputs[2]*anaglyph_constants['color'][0][5] + 
+             channel_inputs[3]*anaglyph_constants['color'][1][3] + 
+             channel_inputs[4]*anaglyph_constants['color'][1][4] + 
+             channel_inputs[5]*anaglyph_constants['color'][1][5])
+    blue = (channel_inputs[0]*anaglyph_constants['color'][0][6] + 
+            channel_inputs[1]*anaglyph_constants['color'][0][7] + 
+            channel_inputs[2]*anaglyph_constants['color'][0][8] + 
+            channel_inputs[3]*anaglyph_constants['color'][1][6] + 
+            channel_inputs[4]*anaglyph_constants['color'][1][7] + 
+            channel_inputs[5]*anaglyph_constants['color'][1][8])
+    channels = [red, green, blue]
+    return render_rgb_composite(
+        channels, special_constants=special_constants
+    )
+
+
 def make_gif(
     arrays: Sequence[Union[np.ndarray, plt.Figure]],
     fn: Union[str, Path],
