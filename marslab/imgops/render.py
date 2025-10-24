@@ -545,7 +545,7 @@ def stereo_anaglyph(
     **channel_instructions: "LookInstruction",
 ):
     """ 
-    channel_inputs: a dict with three items (the keys are 'red', 'green', 
+    raw_channels: a dict with three items (the keys are 'red', 'green', 
     'blue'), where each item is a list of two ndarrays (the first array is 
     treated as the left eye input in the calculations below, and the second 
     array is treated as the right eye input)
@@ -564,9 +564,9 @@ def stereo_anaglyph(
     else: 
         color = 'color'
 
-    if ('prefilter' in channel_instructions 
-        and channel_instructions['prefilter']['function'] == normalize_range):
-        norm_kwargs = channel_instructions['prefilter']['params']
+    if ('filter' in channel_instructions 
+        and channel_instructions['filter']['function'] == normalize_range):
+        norm_kwargs = channel_instructions['filter']['params']
         channel_inputs = {}
         for name in ("red", "green", "blue"):
             left_norm = normalize_range(raw_channels[name][0], **norm_kwargs)
@@ -574,6 +574,15 @@ def stereo_anaglyph(
             channel_inputs[name] = [left_norm, right_norm]
     else:
         channel_inputs = raw_channels
+
+    # This check is primarily for mosaics, which often have differently sized 
+    # left and right eye images (only by a couple pixels, but the calculations 
+    # below assume the input arrays are the same shape)
+    # TODO: add a crop step here if anaglyphs are consistently failing because 
+    # of mismatched image sizes
+    if channel_inputs['red'][0].shape != channel_inputs['red'][1].shape:
+        print("The left and right eye images are different sizes. Anaglyphs are not yet implemented for cases like this.")
+        return np.zeros(channel_inputs['red'][0].shape)
     
     red = (
         channel_inputs['red'][0] * constants_matrix[color][0][0] + 
