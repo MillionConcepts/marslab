@@ -541,9 +541,7 @@ def render_nested_rgb_composite(
 
 
 def stereo_anaglyph(
-    channel_inputs: Mapping[str, np.ndarray],
-    *,
-    norm_kwargs=None,
+    raw_channels: Mapping[str, np.ndarray],
     **channel_instructions: "LookInstruction",
 ):
     """ 
@@ -566,8 +564,18 @@ def stereo_anaglyph(
     else: 
         color = 'color'
 
-    rendered_channels = {}
-    rendered_channels['red'] = (
+    if ('prefilter' in channel_instructions 
+        and channel_instructions['prefilter']['function'] == normalize_range):
+        norm_kwargs = channel_instructions['prefilter']['params']
+        channel_inputs = {}
+        for name in ("red", "green", "blue"):
+            left_norm = normalize_range(raw_channels[name][0], **norm_kwargs)
+            right_norm = normalize_range(raw_channels[name][1], **norm_kwargs)
+            channel_inputs[name] = [left_norm, right_norm]
+    else:
+        channel_inputs = raw_channels
+    
+    red = (
         channel_inputs['red'][0] * constants_matrix[color][0][0] + 
         channel_inputs['green'][0] * constants_matrix[color][0][1] + 
         channel_inputs['blue'][0] * constants_matrix[color][0][2] + 
@@ -575,7 +583,7 @@ def stereo_anaglyph(
         channel_inputs['green'][1] * constants_matrix[color][1][1] + 
         channel_inputs['blue'][1] * constants_matrix[color][1][2]
     )
-    rendered_channels['green'] = (
+    green = (
         channel_inputs['red'][0] * constants_matrix[color][0][3] + 
         channel_inputs['green'][0] * constants_matrix[color][0][4] + 
         channel_inputs['blue'][0] * constants_matrix[color][0][5] + 
@@ -583,7 +591,7 @@ def stereo_anaglyph(
         channel_inputs['green'][1] * constants_matrix[color][1][4] + 
         channel_inputs['blue'][1] * constants_matrix[color][1][5]
     )
-    rendered_channels['blue'] = (
+    blue = (
         channel_inputs['red'][0] * constants_matrix[color][0][6] + 
         channel_inputs['green'][0] * constants_matrix[color][0][7] + 
         channel_inputs['blue'][0] * constants_matrix[color][0][8] + 
@@ -591,12 +599,7 @@ def stereo_anaglyph(
         channel_inputs['green'][1] * constants_matrix[color][1][7] + 
         channel_inputs['blue'][1] * constants_matrix[color][1][8]
     )
-    norm_kwargs = {} if norm_kwargs is None else norm_kwargs
-    norm_channels = [
-        normalize_range(rendered_channels[name], **norm_kwargs)
-        for name in ("red", "green", "blue")
-    ]
-    return render_rgb_composite(norm_channels)
+    return render_rgb_composite([red, green, blue])
 
 
 def make_gif(
