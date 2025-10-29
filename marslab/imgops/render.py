@@ -34,6 +34,7 @@ from marslab.imgops.imgutils import (
     eightbit,
     enhance_color,
     normalize_range,
+    crop,
 )
 from marslab.imgops.pltutils import (
     attach_axis,
@@ -540,15 +541,43 @@ def render_nested_rgb_composite(
     )
 
 
+def trim_anaglyph_inputs(channel_inputs):
+    cropped_inputs = {}
+    for name in ('red', 'green', 'blue'):
+        left_eye = channel_inputs[name][0]
+        right_eye = channel_inputs[name][1]
+
+        l_height, l_width = left_eye.shape
+        r_height, r_width = right_eye.shape
+        w_dif = abs(l_width - r_width)
+        h_dif = abs(l_height - r_height)
+        crop_w_amount = int(w_dif / 2 - ((w_dif % 2)/2))
+        crop_h_amount = int(h_dif / 2 - ((h_dif % 2)/2))
+        
+        # crop the larger width, leave height alone
+        if l_width > r_width:
+            left_eye = crop(left_eye, (crop_w_amount, crop_w_amount, 0, 0))
+        elif r_width > l_width:
+            right_eye = crop(right_eye, (crop_w_amount, crop_w_amount, 0, 0))
+        # crop the larger height, leave width alone
+        if l_height > r_height:
+            left_eye = crop(left_eye, (0, 0, crop_h_amount, crop_h_amount))
+        elif r_height > l_height:
+            right_eye = crop(right_eye, (0, 0, crop_h_amount, crop_h_amount))
+
+        cropped_inputs[name] = [left_eye, right_eye]
+    return(cropped_inputs)
+
+
 def stereo_anaglyph(
     raw_channels: Mapping[str, np.ndarray],
     **channel_instructions: "LookInstruction",
 ):
     """ 
-    raw_channels: a dict with three items (the keys are 'red', 'green', 
-    'blue'), where each item is a list of two ndarrays (the first array is 
-    treated as the left eye input in the calculations below, and the second 
-    array is treated as the right eye input)
+    raw_channels: a Mapping with three keys: 'red', 'green', and 'blue'; where 
+    each value is a list of two ndarrays (the first array is treated as the 
+    left eye input in the calculations below, and the second array is treated 
+    as the right eye input)
 
     The formulas and constants used to calculate values for rendered_channels
     can be found at: https://www.3dtv.at/knowhow/anaglyphcomparison_en.aspx
@@ -575,15 +604,11 @@ def stereo_anaglyph(
     else:
         channel_inputs = raw_channels
 
-    # This check is primarily for mosaics, which often have differently sized 
-    # left and right eye images (only by a couple pixels, but the calculations 
-    # below assume the input arrays are the same shape)
-    # TODO: add a crop step here if anaglyphs are consistently failing because 
-    # of mismatched image sizes
+    # This check is primarily for mosaics. Their left and right eye images are 
+    # often different sizes.
     if channel_inputs['red'][0].shape != channel_inputs['red'][1].shape:
-        print("The left and right eye images are different sizes. Anaglyphs are not yet implemented for cases like this.")
-        return np.zeros(channel_inputs['red'][0].shape)
-    
+        channel_inputs = trim_anaglyph_inputs(channel_inputs)
+
     red = (
         channel_inputs['red'][0] * constants_matrix[color][0][0] + 
         channel_inputs['green'][0] * constants_matrix[color][0][1] + 
