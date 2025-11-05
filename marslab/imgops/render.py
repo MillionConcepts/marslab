@@ -551,19 +551,20 @@ def trim_anaglyph_inputs(channel_inputs):
         r_height, r_width = right_eye.shape
         w_dif = abs(l_width - r_width)
         h_dif = abs(l_height - r_height)
-        crop_w_amount = int(w_dif / 2 - ((w_dif % 2)/2))
-        crop_h_amount = int(h_dif / 2 - ((h_dif % 2)/2))
-        
+        left_crop = int(w_dif / 2)
+        right_crop = left_crop if (w_dif % 2 == 0) else (left_crop + 1)
+        top_crop = int(h_dif / 2)
+        bottom_crop = top_crop if (h_dif % 2 == 0) else (top_crop + 1)        
         # crop the larger width, leave height alone
         if l_width > r_width:
-            left_eye = crop(left_eye, (crop_w_amount, crop_w_amount, 0, 0))
+            left_eye = crop(left_eye, (left_crop, right_crop, 0, 0))
         elif r_width > l_width:
-            right_eye = crop(right_eye, (crop_w_amount, crop_w_amount, 0, 0))
+            right_eye = crop(right_eye, (left_crop, right_crop, 0, 0))
         # crop the larger height, leave width alone
         if l_height > r_height:
-            left_eye = crop(left_eye, (0, 0, crop_h_amount, crop_h_amount))
+            left_eye = crop(left_eye, (0, 0, top_crop, bottom_crop))
         elif r_height > l_height:
-            right_eye = crop(right_eye, (0, 0, crop_h_amount, crop_h_amount))
+            right_eye = crop(right_eye, (0, 0, top_crop, bottom_crop))
 
         cropped_inputs[name] = [left_eye, right_eye]
     return(cropped_inputs)
