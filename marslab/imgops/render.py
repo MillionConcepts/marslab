@@ -542,6 +542,12 @@ def render_nested_rgb_composite(
 
 
 def trim_anaglyph_inputs(channel_inputs):
+    """
+    Crop the anaglyph input arrays if the left and right eye widths and/or 
+    heights are different. Pixels are cropped from both sides of the larger 
+    image to avoid creating an artificially large offset in where features of 
+    interest are positioned within the image.
+    """
     cropped_inputs = {}
     for name in ('red', 'green', 'blue'):
         left_eye = channel_inputs[name][0]
