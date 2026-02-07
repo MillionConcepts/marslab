@@ -129,6 +129,28 @@ WAVELENGTH_TO_FILTER = {
             1013: "R6",  #
         },
     },
+    "PCAM": {
+        "L": {
+            739: "L1",  # no filter (bandpass = 338 nm)
+            753: "L2",
+            673: "L3",
+            601: "L4",
+            535: "L5",
+            482: "L6",
+            432: "L7",
+            440: "L8",  # solar filter
+        },
+        "R": {
+            436: "R1",
+            754: "R2",
+            803: "R3",
+            864: "R4",
+            904: "R5",
+            934: "R6",
+            1009: "R7",
+            880: "R8",  # solar filter
+        },
+    },
 }
 
 # Scale to the effective resolution or bayer element ratio of each band
@@ -242,7 +264,7 @@ def make_canonical_averaged_filters(abbreviation):
     return {filt: caf[filt] for filt in sorted(caf, key=lambda x: caf[x])}
 
 
-XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM", "SCAM"]
+XCAM_ABBREVIATIONS = ["MCAM", "ZCAM", "CCAM", "SCAM", "PCAM"]
 DERIVED_CAM_DICT = {
     abbrev: {
         "filters": make_xcam_filter_dict(abbrev),
