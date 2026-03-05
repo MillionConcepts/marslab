@@ -3,21 +3,46 @@
 from functools import cache, partial
 from operator import attrgetter
 from pathlib import Path
+from string import digits, ascii_lowercase
 from types import MappingProxyType
 
-import pandas as pd
 from dustgoggles.scrape import bulk_scrape_metadata, scrape_patterns
+import pandas as pd
 
-from marslab.compat.xcam import DERIVED_CAM_DICT
 from marslab.bandset.bandset import BandSet
+from marslab.compat.xcam import DERIVED_CAM_DICT
 from marslab.imgops.loaders import pdr_load
+
+B36_LEX = digits + ascii_lowercase
+
+
+def parse_pcam_36(chars: str):
+    """
+    PCAM uses a quasi-modulo 36 system for SITE and POS, but with an arbitrary
+    three-branch ordering.
+    """
+    assert len(chars) == 2
+    if chars in ("__", "##"):
+        # "operations" and "archive" -- must be extracted from label
+        return None
+    if chars[0].isdigit():
+        # 00 - 99 are base 10 as written
+        if chars[1].isdigit():
+            return int(chars)
+        # 0A - 9Z -- with no digits in the second place -- are 1036-1295
+        return 1036 + int(chars[0]) * 26 + ascii_lowercase.index(chars[1])
+    # A0 - ZZ -- with no digits in the first place -- are 100 through 1035
+    return 100 + ascii_lowercase.index(chars[0]) * 36 + B36_LEX.index(chars[1])
 
 
 def parse_pcam_fn(pcam_fn):
     filename = Path(pcam_fn).name
     return {
-        "ROVER": filename[0],
+        "ROVER": int(filename[0]),
+        "SCLK": int(filename[2:11]),
         "PRODUCT_TYPE": filename[11:14].upper(),
+        "SITE": parse_pcam_36(filename[14:16]),
+        "POS": parse_pcam_36(filename[16:18]),
         "SEQ_ID": filename[18:23].upper(),
         "FILTER": filename[23:25].upper(),
         "VERSION": filename[26],
