@@ -59,6 +59,10 @@ MERSPECT_M20_COLOR_MAPPINGS = {
     "azure-1": "#0068b2",
     "azure-2": "#004a7f",
     "azure-3": "#002c4c",
+    "black": "#000000",         # not included in merspect
+    "dark-gray": "#343534",     # not included in merspect
+    "gray": "#656764",          # not included in merspect
+    "light-gray": "#969895",    # not included in merspect
 }
 # The colors below here are from the MCAM / PCAM legacy functionality
 
@@ -148,6 +152,10 @@ COLOR_TO_FEATURE_TYPE = {
         "azure-1": None,
         "azure-2": None,
         "azure-3": None,
+        "black": None,
+        "dark-gray": None,
+        "gray": None,
+        "light-gray": None,
     },
 }
 

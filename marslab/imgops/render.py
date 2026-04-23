@@ -34,6 +34,7 @@ from marslab.imgops.imgutils import (
     eightbit,
     enhance_color,
     normalize_range,
+    crop,
 )
 from marslab.imgops.pltutils import (
     attach_axis,
@@ -538,6 +539,108 @@ def render_nested_rgb_composite(
     return render_rgb_composite(
         norm_channels, special_constants=special_constants
     )
+
+
+def trim_anaglyph_inputs(channel_inputs):
+    """
+    Crop the anaglyph input arrays if the left and right eye widths and/or 
+    heights are different. Pixels are cropped from both sides of the larger 
+    image to avoid creating an artificially large offset in where features of 
+    interest are positioned within the image.
+    """
+    cropped_inputs = {}
+    for name in ('red', 'green', 'blue'):
+        left_eye = channel_inputs[name][0]
+        right_eye = channel_inputs[name][1]
+
+        l_height, l_width = left_eye.shape
+        r_height, r_width = right_eye.shape
+        w_dif = abs(l_width - r_width)
+        h_dif = abs(l_height - r_height)
+        left_crop = int(w_dif / 2)
+        right_crop = left_crop if (w_dif % 2 == 0) else (left_crop + 1)
+        top_crop = int(h_dif / 2)
+        bottom_crop = top_crop if (h_dif % 2 == 0) else (top_crop + 1)        
+        # crop the larger width, leave height alone
+        if l_width > r_width:
+            left_eye = crop(left_eye, (left_crop, right_crop, 0, 0))
+        elif r_width > l_width:
+            right_eye = crop(right_eye, (left_crop, right_crop, 0, 0))
+        # crop the larger height, leave width alone
+        if l_height > r_height:
+            left_eye = crop(left_eye, (0, 0, top_crop, bottom_crop))
+        elif r_height > l_height:
+            right_eye = crop(right_eye, (0, 0, top_crop, bottom_crop))
+
+        cropped_inputs[name] = [left_eye, right_eye]
+    return(cropped_inputs)
+
+
+def stereo_anaglyph(
+    raw_channels: Mapping[str, np.ndarray],
+    **channel_instructions: "LookInstruction",
+):
+    """ 
+    raw_channels: a Mapping with three keys: 'red', 'green', and 'blue'; where 
+    each value is a list of two ndarrays (the first array is treated as the 
+    left eye input in the calculations below, and the second array is treated 
+    as the right eye input)
+
+    The formulas and constants used to calculate values for rendered_channels
+    can be found at: https://www.3dtv.at/knowhow/anaglyphcomparison_en.aspx
+    """
+    constants_matrix = {
+        'mono': [[ 0.299, 0.587, 0.114, 0, 0, 0, 0, 0, 0 ], 
+                 [ 0, 0, 0, 0.299, 0.587, 0.114, 0.299, 0.587, 0.114 ]],
+        'color': [[ 1, 0, 0, 0, 0, 0, 0, 0, 0 ], 
+                  [ 0, 0, 0, 0, 1, 0, 0, 0, 1 ]],
+    }
+    if 'anaglyph_type' in channel_instructions:
+        color = channel_instructions['anaglyph_type']
+    else: 
+        color = 'color'
+
+    if ('filter' in channel_instructions 
+        and channel_instructions['filter']['function'] == normalize_range):
+        norm_kwargs = channel_instructions['filter']['params']
+        channel_inputs = {}
+        for name in ("red", "green", "blue"):
+            left_norm = normalize_range(raw_channels[name][0], **norm_kwargs)
+            right_norm = normalize_range(raw_channels[name][1], **norm_kwargs)
+            channel_inputs[name] = [left_norm, right_norm]
+    else:
+        channel_inputs = raw_channels
+
+    # This check is primarily for mosaics. Their left and right eye images are 
+    # often different sizes.
+    if channel_inputs['red'][0].shape != channel_inputs['red'][1].shape:
+        channel_inputs = trim_anaglyph_inputs(channel_inputs)
+
+    red = (
+        channel_inputs['red'][0] * constants_matrix[color][0][0] + 
+        channel_inputs['green'][0] * constants_matrix[color][0][1] + 
+        channel_inputs['blue'][0] * constants_matrix[color][0][2] + 
+        channel_inputs['red'][1] * constants_matrix[color][1][0] + 
+        channel_inputs['green'][1] * constants_matrix[color][1][1] + 
+        channel_inputs['blue'][1] * constants_matrix[color][1][2]
+    )
+    green = (
+        channel_inputs['red'][0] * constants_matrix[color][0][3] + 
+        channel_inputs['green'][0] * constants_matrix[color][0][4] + 
+        channel_inputs['blue'][0] * constants_matrix[color][0][5] + 
+        channel_inputs['red'][1] * constants_matrix[color][1][3] + 
+        channel_inputs['green'][1] * constants_matrix[color][1][4] + 
+        channel_inputs['blue'][1] * constants_matrix[color][1][5]
+    )
+    blue = (
+        channel_inputs['red'][0] * constants_matrix[color][0][6] + 
+        channel_inputs['green'][0] * constants_matrix[color][0][7] + 
+        channel_inputs['blue'][0] * constants_matrix[color][0][8] + 
+        channel_inputs['red'][1] * constants_matrix[color][1][6] + 
+        channel_inputs['green'][1] * constants_matrix[color][1][7] + 
+        channel_inputs['blue'][1] * constants_matrix[color][1][8]
+    )
+    return render_rgb_composite([red, green, blue])
 
 
 def make_gif(
