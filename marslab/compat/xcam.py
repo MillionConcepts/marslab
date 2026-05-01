@@ -560,7 +560,7 @@ def count_rois_on_xcam_images(
         rois[eye] = {hdu.header["NAME"]: hdu.data for hdu in hdus}
 
     if bayer_pixel_dict is None:
-        bayer_pixel_dict = BAND_TO_BAYER[instrument]
+        bayer_pixel_dict = BAND_TO_BAYER.get(instrument, {})
     # don't attempt to apply Bayer masks if Bayer pixels are explicitly
     # assigned as None. Permits overriding Bayer pixel selection for use cases
     # like images that arrived at our pipeline already debayered.
@@ -647,7 +647,7 @@ def apply_pixel_map(detector_mask, filter_name, image, pixel_map_dict):
 
 
 def make_detector_mask(bayer_masks, bayer_pixel_dict, filter_name, image):
-    if bayer_pixel_dict[filter_name] is not None:
+    if bayer_pixel_dict.get(filter_name) is not None:
         detector_mask = np.full(image.shape, False)
         bayer_pixels = bayer_pixel_dict[filter_name]
         if isinstance(bayer_pixels, str):

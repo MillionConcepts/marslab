@@ -3,8 +3,10 @@
 from functools import cache, partial
 from operator import attrgetter
 from pathlib import Path
+import re
 from string import digits, ascii_lowercase
 from types import MappingProxyType
+from typing import Literal, Optional
 
 from dustgoggles.scrape import bulk_scrape_metadata, scrape_patterns
 import pandas as pd
@@ -14,6 +16,31 @@ from marslab.compat.xcam import DERIVED_CAM_DICT
 from marslab.imgops.loaders import pdr_load
 
 B36_LEX = digits + ascii_lowercase
+
+import re
+from typing import Literal
+
+RoverIdentifier = Literal[
+    "A", "B", 1, 2, "1", "2", "MER-A", "MER-B", "MER-1", "MER-2",
+    "MER_A", "MER_B", "MER_1", "MER_2"
+]
+
+ROVERPAT = re.compile(r"(?:MER)?[-_]?([AB12])")
+
+
+def normalize_rover_id(rover: RoverIdentifier):
+    try:
+        if isinstance(rover, str):
+            rover = ROVERPAT.match(rover.upper()).group(1)
+        if rover in (1, "1"):
+            rover = "B"
+        elif rover in (2, "2"):
+            rover = "A"
+        if rover not in ("A", "B"):
+            raise ValueError
+        return rover
+    except (AttributeError, ValueError) as e:
+        raise ValueError(f"Unknown MER rover id representation '{rover}'")
 
 
 def parse_pcam_36(chars: str):
@@ -38,7 +65,7 @@ def parse_pcam_36(chars: str):
 def parse_pcam_fn(pcam_fn):
     filename = Path(pcam_fn).name
     return {
-        "ROVER": int(filename[0]),
+        "ROVER": {"1": "B", "2": "A"}[filename[0]],
         "SCLK": int(filename[2:11]),
         "PRODUCT_TYPE": filename[11:14].upper(),
         "SITE": parse_pcam_36(filename[14:16]),
@@ -59,7 +86,6 @@ PCAM_METADATA_REGEX = MappingProxyType(
 scrape_pcam_metadata = cache(
     partial(scrape_patterns, metadata_regex=PCAM_METADATA_REGEX)
 )
-
 
 bulk_scrape_pcam_metadata = partial(
     bulk_scrape_metadata, pattern_scraper=scrape_pcam_metadata
@@ -86,7 +112,13 @@ def setup_pcam_bandset_metadata(metadata):
 
 
 class PcamBandSet(BandSet):
-    def __init__(self, observation, rois=None, threads=None):
+    def __init__(
+        self,
+        observation,
+        rois=None,
+        suffix: str = "",
+        threads: Optional[dict] = None
+    ):
         files = setup_pcam_bandset_metadata(observation)
         # MER pancam IOF object names are "IMAGE" in attached PDS3 labels.
         # The detached PDS4 labels use "Image_Object" instead.
@@ -98,3 +130,4 @@ class PcamBandSet(BandSet):
             rois=rois,
             threads=threads,
         )
+        self.suffix = suffix

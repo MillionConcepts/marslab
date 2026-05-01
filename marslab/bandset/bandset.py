@@ -148,7 +148,7 @@ class BandSet:
                 results.append(
                     self.load_method(path, band_df, bands, self.precached)
                 )
-                log.info("loaded " + path)
+                log.info(f"loaded {path}")
         else:
             results = {}
             # caution: dict comprehension does _not_ work well here
