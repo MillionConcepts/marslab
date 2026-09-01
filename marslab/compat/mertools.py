@@ -59,10 +59,10 @@ MERSPECT_M20_COLOR_MAPPINGS = {
     "azure-1": "#0068b2",
     "azure-2": "#004a7f",
     "azure-3": "#002c4c",
-    "black": "#000000",         # not included in merspect
-    "dark-gray": "#343534",     # not included in merspect
-    "gray": "#656764",          # not included in merspect
-    "light-gray": "#969895",    # not included in merspect
+    "black": "#000000",  # not included in merspect
+    "dark-gray": "#343534",  # not included in merspect
+    "gray": "#656764",  # not included in merspect
+    "light-gray": "#969895",  # not included in merspect
 }
 # The colors below here are from the MCAM / PCAM legacy functionality
 
@@ -84,9 +84,29 @@ MERSPECT_MSL_COLOR_MAPPINGS = {
     "dark purple": "#800080",
 }
 
+# no, not MERSpect, but a MERSpect successor, so close enough, sorry
+ROI_STUDIO_COLOR_MAPPINGS = {
+    "red": "#b20000",   # duplicated from above w/ different hex code
+    "green": "#00ff3b",
+    "blue": "#1500ff",
+    "cyan": "#00ffee",
+    "forest": "#007f1d",
+    "yellow": "#eeff00",  # duplicated from above w/different hex
+    "magenta": "#ff00ae",
+    "salmon": "#ff7f7f",
+    "teal": "#007f77",
+    "goldenrod": "#b27100",
+    "sienna": "#7f5000",
+    "navy": "#0a007f",
+    "scarlet": "#ff0000",
+    "maroon": "#7f0000",
+    "purple": "#ad0bbf",
+}
+
 MERSPECT_COLOR_MAPPINGS = {
     **MERSPECT_M20_COLOR_MAPPINGS,
     **MERSPECT_MSL_COLOR_MAPPINGS,
+    **ROI_STUDIO_COLOR_MAPPINGS,
 }
 
 # Standard assignments of MERSpect ROI colors to feature classes.
