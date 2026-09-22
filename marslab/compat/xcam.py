@@ -131,14 +131,14 @@ WAVELENGTH_TO_FILTER = {
     },
     "PCAM": {
         "L": {
-            739: "L1",  # no filter (bandpass = 338 nm)
+            # 739: "L1",  # no filter (bandpass = 338 nm)
             753: "L2",
             673: "L3",
             601: "L4",
             535: "L5",
             482: "L6",
             432: "L7",
-            440: "L8",  # solar filter
+            # 440: "L8",  # solar filter
         },
         "R": {
             436: "R1",
@@ -148,7 +148,7 @@ WAVELENGTH_TO_FILTER = {
             904: "R5",
             934: "R6",
             1009: "R7",
-            880: "R8",  # solar filter
+            # 880: "R8",  # solar filter
         },
     },
 }
