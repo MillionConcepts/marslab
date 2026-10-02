@@ -769,6 +769,10 @@ def aggregate_across_filters(eye, melted, roi_name, rois):
     # degenerate case of ROIs drawn on only one filter, but this is not really
     # a big deal.
     counts, position = roi_stats(roi), roi_position(rois[eye][roi_name])
+
+    # NOTE: ROW / COLUMN here are image coordinates, _not_ detector
+    #  coordinates. Consumers that want detector row/column on subframed
+    #  images are responsible for computing those offsets.
     base_aggregate_stat = {
         "COLOR": roi_name,
         eye: counts["mean"],
