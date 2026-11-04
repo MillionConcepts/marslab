@@ -615,6 +615,19 @@ def stereo_anaglyph(
     # often different sizes.
     if channel_inputs['red'][0].shape != channel_inputs['red'][1].shape:
         channel_inputs = trim_anaglyph_inputs(channel_inputs)
+    # TODO: add a check for red/green/blue input image sizes. The calculations 
+    # below will fail if their array shapes are different.
+
+    # Calculate a synthetic green channel from red and blue
+    if 'synthetic_green' in channel_instructions:
+        if channel_instructions['synthetic_green'] in ('left', 'both'):
+            channel_inputs['green'][0] = (
+                (channel_inputs['red'][0] + channel_inputs['blue'][0]) / 2
+            )
+        if channel_instructions['synthetic_green'] in ('right', 'both'):
+            channel_inputs['green'][1] = (
+                (channel_inputs['red'][1] + channel_inputs['blue'][1]) / 2
+            )
 
     red = (
         channel_inputs['red'][0] * constants_matrix[color][0][0] + 

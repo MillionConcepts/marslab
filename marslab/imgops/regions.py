@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from scipy.ndimage import sobel, distance_transform_edt
 from scipy.stats import skew, kurtosis, mode
@@ -8,8 +10,11 @@ def furthest_from_edge(image):
     return np.unravel_index(distances.argmax(), distances.shape)
 
 
-def roi_position(roi):
+def roi_position(roi, subframe_origin: Optional[tuple[int, int]] = None):
     y, x = tuple(map(np.median, np.nonzero(roi)))
+    if subframe_origin is not None:
+        y += subframe_origin[0]
+        x += subframe_origin[1]
     return {
         "y": y,
         "x": x,

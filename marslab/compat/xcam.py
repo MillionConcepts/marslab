@@ -133,14 +133,14 @@ WAVELENGTH_TO_FILTER = {
     },
     "PCAM": {
         "L": {
-            739: "L1",  # no filter (bandpass = 338 nm)
+            # 739: "L1",  # no filter (bandpass = 338 nm)
             753: "L2",
             673: "L3",
             601: "L4",
             535: "L5",
             482: "L6",
             432: "L7",
-            440: "L8",  # solar filter
+            # 440: "L8",  # solar filter
         },
         "R": {
             436: "R1",
@@ -150,7 +150,7 @@ WAVELENGTH_TO_FILTER = {
             904: "R5",
             934: "R6",
             1009: "R7",
-            880: "R8",  # solar filter
+            # 880: "R8",  # solar filter
         },
     },
 }
@@ -542,6 +542,9 @@ def count_rois_on_xcam_images(
     error_map_dict=None,
     bayer_pixel_dict=None,
     special_constants=tuple([0]),
+    # offset in detector pixels for center pixel, intended for subframes
+    #
+    center_offset: Optional[dict[str, tuple[int, int]]] = None
 ):
     """
     takes an roi hdulist, a dict of xcam images, and returns a marslab data
@@ -562,7 +565,7 @@ def count_rois_on_xcam_images(
         rois[eye] = {hdu.header["NAME"]: hdu.data for hdu in hdus}
 
     if bayer_pixel_dict is None:
-        bayer_pixel_dict = BAND_TO_BAYER[instrument]
+        bayer_pixel_dict = BAND_TO_BAYER.get(instrument, {})
     # don't attempt to apply Bayer masks if Bayer pixels are explicitly
     # assigned as None. Permits overriding Bayer pixel selection for use cases
     # like images that arrived at our pipeline already debayered.
@@ -593,7 +596,7 @@ def count_rois_on_xcam_images(
             FILTER_TO_RESOLUTION_FACTOR.get(instrument),
             special_constants,
         )
-    cube_records = aggregate_eye_stats(roi_records, rois)
+    cube_records = aggregate_eye_stats(roi_records, rois, center_offset)
     roi_records = squeeze_records(filter_arrays_from(roi_records)).drop(
         columns="COLOR"
     )
@@ -649,7 +652,7 @@ def apply_pixel_map(detector_mask, filter_name, image, pixel_map_dict):
 
 
 def make_detector_mask(bayer_masks, bayer_pixel_dict, filter_name, image):
-    if bayer_pixel_dict[filter_name] is not None:
+    if bayer_pixel_dict.get(filter_name) is not None:
         detector_mask = np.full(image.shape, False)
         bayer_pixels = bayer_pixel_dict[filter_name]
         if isinstance(bayer_pixels, str):
@@ -736,17 +739,29 @@ def calculate_roi_error(
     return tuple(errors.values())[0]["mean"]
 
 
-def aggregate_eye_stats(roi_records, rois):
+def aggregate_eye_stats(
+    roi_records,
+    rois,
+    center_offset: Optional[dict[str, tuple[int, int]]] = None
+):
     roi_frame = pd.DataFrame(roi_records)
     for column in numeric_columns(roi_frame):
         roi_frame[column] = roi_frame[column].astype(np.float32)
     cube_records = []
     for eye in ("LEFT", "RIGHT"):
-        cube_records += aggregate_single_eye_stats(roi_frame, eye, rois)
+        if center_offset is not None:
+            offset = center_offset[eye]
+        else:
+            offset = None
+        cube_records += aggregate_single_eye_stats(
+            roi_frame, eye, rois, offset
+        )
     return squeeze_records(filter_arrays_from(cube_records))
 
 
-def aggregate_single_eye_stats(statframe, eye, rois):
+def aggregate_single_eye_stats(
+    statframe, eye, rois, offset: Optional[tuple[int, int]] = None
+):
     eye_values = statframe.loc[
         :, statframe.columns.str.match(f"{eye[0].upper()}.*VALUES.*")
     ]
@@ -755,13 +770,19 @@ def aggregate_single_eye_stats(statframe, eye, rois):
     eye_values.index = statframe["COLOR"]
     melted = pd.melt(eye_values, ignore_index=False).dropna()
     eyestats = [
-        aggregate_across_filters(eye, melted, roi_name, rois)
+        aggregate_across_filters(eye, melted, roi_name, rois, offset)
         for roi_name in rois[eye].keys()
     ]
     return eyestats
 
 
-def aggregate_across_filters(eye, melted, roi_name, rois):
+def aggregate_across_filters(
+    eye,
+    melted,
+    roi_name,
+    rois,
+    subframe_offset: Optional[tuple[int, int]] = None
+):
     from marslab.imgops.regions import roi_stats, roi_position
 
     roi = melted.loc[roi_name]["value"]
@@ -770,7 +791,9 @@ def aggregate_across_filters(eye, melted, roi_name, rois):
     # this performs stats twice (here and in the per-filter counting) in the
     # degenerate case of ROIs drawn on only one filter, but this is not really
     # a big deal.
-    counts, position = roi_stats(roi), roi_position(rois[eye][roi_name])
+    counts, position = (
+        roi_stats(roi), roi_position(rois[eye][roi_name], subframe_offset)
+    )
     base_aggregate_stat = {
         "COLOR": roi_name,
         eye: counts["mean"],
